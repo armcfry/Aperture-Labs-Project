@@ -1,53 +1,50 @@
-# Aperture-Labs-Project
+# Aperture Labs - FOD Detection
+
 CSCI 577A Spring 2026 Group Project
 
-## VLM Architectures for Defect Detection
+Foreign Object Debris (FOD) detection using Vision Language Models.
 
-### 1. Contrastive (CLIP, SigLIP)
-- Dual encoder, shared embedding space
-- Zero-shot classification only
-- Fast, no localization
+## Setup
 
-### 2. Open-Vocab Detection (OWLv2)
-- Text-conditioned object detection
-- Bounding box output
-- No retraining for new defect types
+### 1. Install Ollama
 
-### 3. Generative VLM (Florence-2, PaliGemma)
-- Image → LLM → natural language output
-- Flexible QA, descriptions
-- Slower, may hallucinate
+Download from https://ollama.com
 
-### 4. Region-Based (GLIP)
-- Region proposals → VLM reasoning per region
-- Good for multi-defect scenes
-- Two-stage latency
+### 2. Pull the model and start server
 
-### 5. Segmentation VLM (CLIPSeg, SAM hybrids)
-- Pixel-level masks from text
-- Precise boundaries
-- Slower, still maturing
+```bash
+ollama pull qwen2.5vl:7b
+ollama serve
+```
 
-### 6. Seq2Seq (Florence-2, Pix2Seq)
-- Unified detection + captioning + VQA
-- Structured outputs
-- Single model, multiple tasks
+### 3. Setup backend (first time only)
 
-### 7. Anomaly + VLM (WinCLIP, AnomalyCLIP)
-- Learns "normal," flags deviations
-- No defect labels needed
-- Sensitive to training distribution
+```bash
+cd backend
+setup.bat
+```
 
-### 8. Hybrid Pipelines
-- Chain: Detector → Segmenter → Classifier → LLM
-- Best-in-class per stage
-- Complex, higher latency
+### 4. Run the server
 
-# What are we going to use?
-Not sure yet. Still looking it up
-## Encoder-Based: Easiest
-**CLIP** (Constrastive Language Image Pre-Training): 
-* Dual encoders (vision and test). 
-    * Learns from being trained on (image, text) pairs, which allows it to perform zero-shot classification. 
-* Zero Shot = Classify new examples from previously unseen classes.
+```bash
+cd backend
+run.bat
+```
+
+## API
+
+Swagger UI: http://localhost:8000/docs
+
+### POST /api/detect
+
+Upload an image to detect FOD. Returns location and description of any FOD found.
+
+**Test with curl (Windows):**
+```bash
+curl.exe -X POST http://localhost:8000/api/detect -F "file=@data/FOD_pictures/bolt_in_front_of_plane.png"
+```
+
+**Response:**
+Raw response
+{"response":"In the image, there is a visible Foreign Object Debris (FOD) item in the foreground. Here is the description:\n\n- **Item**: The item appears to be a cylindrical object with markings that read \"48 FW - GOLDEN BOLT.\" It looks like a spent cartridge or a similar type of ammunition casing.\n- **Location**: It is lying on the ground in the foreground, closer to the bottom left corner of the image.\n\nThis item is likely FOD and should be removed to ensure safety and operational readiness."}
 
