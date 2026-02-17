@@ -17,7 +17,7 @@ export default function Header({
     const { theme, currentProject, toggleTheme } = useApp();
 
     return (
-        <header className="bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800">
+        <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800">
             <div className="max-w-[1800px] mx-auto px-6 py-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">

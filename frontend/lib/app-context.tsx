@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-interface Project {
+export interface Project {
     id: string;
     name: string;
     createdAt: Date;
