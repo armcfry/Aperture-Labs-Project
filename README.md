@@ -48,3 +48,18 @@ curl.exe -X POST http://localhost:8000/api/detect -F "file=@data/FOD_pictures/bo
 Raw response
 {"response":"In the image, there is a visible Foreign Object Debris (FOD) item in the foreground. Here is the description:\n\n- **Item**: The item appears to be a cylindrical object with markings that read \"48 FW - GOLDEN BOLT.\" It looks like a spent cartridge or a similar type of ammunition casing.\n- **Location**: It is lying on the ground in the foreground, closer to the bottom left corner of the image.\n\nThis item is likely FOD and should be removed to ensure safety and operational readiness."}
 
+## Using docker to spin up the database containers
+
+### 1. Make sure you have docker desktop installed.
+### 2. Install docker cli.
+### 3. Spin up containers
+
+    docker compose up -d
+
+This will create two containers. One contains the postgres database, the other holds the minio storage. In the /backend/db/init.sql, two tables are created in the postgres db. One for `users` and the other for `fod_detection` (subject to change.) Database information will persist unless the volumes are deleted.
+
+### 4. To stop running containers (not remove volume)
+    docker compose stop
+
+### 5. To remove the containers and remove the volumes:
+    docker compose down -v
