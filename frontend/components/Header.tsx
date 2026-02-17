@@ -4,8 +4,10 @@
  * Header component for the application.
  */
 
+import { useRouter } from "next/navigation";
 import { Activity, FolderOpen, Sun, Moon, LogOut } from "lucide-react";
 import { useApp } from "@/lib/app-context";
+import { Button } from "@/components/ui/button";
 
 export default function Header({
     onSwitchProject,
@@ -14,7 +16,19 @@ export default function Header({
     onSwitchProject?: () => void;
     onLogout?: () => void;
 }) {
-    const { theme, currentProject, toggleTheme } = useApp();
+    const router = useRouter();
+    const { theme, currentProject, toggleTheme, setCurrentProject } = useApp();
+
+    const handleLogout = () => {
+        // Clear current project
+        setCurrentProject(null);
+        // Navigate to login page
+        router.push("/login");
+        // Call custom logout handler if provided
+        if (onLogout) {
+            onLogout();
+        }
+    };
 
     return (
         <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800">
@@ -41,20 +55,23 @@ export default function Header({
                                     {currentProject.name}
                                 </span>
                                 {onSwitchProject && (
-                                    <button
+                                    <Button
                                         onClick={onSwitchProject}
-                                        className="text-xs text-slate-500 dark:text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 ml-2 transition-colors"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-xs h-auto py-0 px-2 ml-2 text-muted-foreground hover:text-primary"
                                     >
                                         Switch
-                                    </button>
+                                    </Button>
                                 )}
                             </div>
                         )}
                     </div>
-                    <div className="flex items-center gap-3">
-                        <button
+                    <div className="flex items-center gap-2">
+                        <Button
                             onClick={toggleTheme}
-                            className="p-2 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+                            variant="ghost"
+                            size="icon"
                             title={
                                 theme === "dark"
                                     ? "Switch to Light Mode"
@@ -62,20 +79,19 @@ export default function Header({
                             }
                         >
                             {theme === "dark" ? (
-                                <Sun className="w-5 h-5" />
+                                <Sun />
                             ) : (
-                                <Moon className="w-5 h-5" />
+                                <Moon />
                             )}
-                        </button>
-                        {onLogout && (
-                            <button
-                                onClick={onLogout}
-                                className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
-                                title="Logout"
-                            >
-                                <LogOut className="w-5 h-5 text-slate-600 dark:text-zinc-400" />
-                            </button>
-                        )}
+                        </Button>
+                        <Button
+                            onClick={handleLogout}
+                            variant="ghost"
+                            size="icon"
+                            title="Logout"
+                        >
+                            <LogOut />
+                        </Button>
                     </div>
                 </div>
             </div>
