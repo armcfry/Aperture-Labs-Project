@@ -4,18 +4,10 @@
  * Page for creating new projects and viewing all projects.
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-    Activity,
-    FileText,
-    Plus,
-    X,
-    ArrowRight,
-    FolderOpen,
-} from "lucide-react";
-import Header from "@/components/Header";
-import { useApp } from "@/lib/app-context";
+import { FileText, Plus, X, ArrowRight, FolderOpen } from "lucide-react";
+import { useApp, Project } from "@/app/AppProvider";
 import { cn } from "@/lib/utils";
 
 // TODO: Replace with API call to fetch projects
@@ -47,30 +39,22 @@ const DUMMY_PROJECTS = [
 export default function ProjectsPage() {
     const router = useRouter();
     const { setCurrentProject } = useApp();
-    const [projectName, setProjectName] = useState("");
+
+    // New project form fields
+    const [projectName, setProjectName] = useState<string>("");
     const [designSpecs, setDesignSpecs] = useState<File[]>([]);
-    const [showNewProject, setShowNewProject] = useState(
-        DUMMY_PROJECTS.length === 0
-    );
+    // flag to show new project form
+    const [showNewProject, setShowNewProject] = useState<boolean>(DUMMY_PROJECTS.length === 0);
 
     // TODO: Replace with API call to fetch projects
     const existingProjects = DUMMY_PROJECTS;
 
-    // Clear current project when on projects page
-    useEffect(() => {
-        setCurrentProject(null);
-    }, [setCurrentProject]);
-
-    const handleDesignSpecUpload = (
-        e: React.ChangeEvent<HTMLInputElement>
-    ) => {
+    const handleDesignSpecUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
             const newFiles = Array.from(e.target.files);
             setDesignSpecs((prev) => {
                 const existingNames = new Set(prev.map((f) => f.name));
-                const uniqueNewFiles = newFiles.filter(
-                    (file) => !existingNames.has(file.name)
-                );
+                const uniqueNewFiles = newFiles.filter((file) => !existingNames.has(file.name));
                 return [...prev, ...uniqueNewFiles];
             });
             // Reset the input so the same file can be selected again if needed
@@ -84,7 +68,11 @@ export default function ProjectsPage() {
 
     const handleCreateProject = () => {
         if (projectName.trim() && designSpecs.length > 0) {
-            const newProject = {
+            const newProject: Project & {
+                createdAt: Date;
+                updatedAt: Date;
+                designSpecs: string[];
+            } = {
                 id: `proj-${Date.now()}`,
                 name: projectName.trim(),
                 createdAt: new Date(),
@@ -94,21 +82,20 @@ export default function ProjectsPage() {
 
             // TODO: Replace with API call to create project
             // For now, just set it in context and navigate
-            setCurrentProject(newProject);
+            setCurrentProject(newProject as unknown as Project);
             router.push("/inspect");
         }
     };
 
-    const handleSelectProject = (project: typeof DUMMY_PROJECTS[0]) => {
-        setCurrentProject(project);
+    const handleSelectProject = (project: (typeof DUMMY_PROJECTS)[0]) => {
+        setCurrentProject(project as unknown as Project);
         router.push("/inspect");
     };
 
     return (
-        <div className="h-screen bg-slate-50 dark:bg-zinc-950 transition-colors flex flex-col overflow-hidden">
-            <Header />
+        <div className="flex-1 flex flex-col bg-slate-50 dark:bg-zinc-950 transition-colors overflow-hidden">
             {!showNewProject && existingProjects.length > 0 ? (
-                <div className="flex-1 flex flex-col pt-24 overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden">
                     <div className="max-w-[1200px] w-full mx-auto px-6 pt-6 pb-2 flex-shrink-0">
                         <div className="text-center mb-8">
                             <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">
@@ -136,6 +123,7 @@ export default function ProjectsPage() {
                             </div>
                         </div>
                     </div>
+
                     {/* Scrollable Projects List */}
                     <div className="flex-1 overflow-y-auto">
                         <div className="max-w-[1200px] w-full mx-auto px-6 pb-8">
@@ -156,8 +144,8 @@ export default function ProjectsPage() {
                                                         </h3>
                                                     </div>
                                                     <p className="text-sm text-slate-500 dark:text-zinc-500 mb-2">
-                                                        {project.designSpecs?.length || 0}{" "}
-                                                        design specification
+                                                        {project.designSpecs?.length || 0} design
+                                                        specification
                                                         {(project.designSpecs?.length || 0) !== 1
                                                             ? "s"
                                                             : ""}
@@ -170,7 +158,7 @@ export default function ProjectsPage() {
                                                                 month: "short",
                                                                 day: "numeric",
                                                                 year: "numeric",
-                                                            }
+                                                            },
                                                         )}
                                                     </p>
                                                 </div>
@@ -184,8 +172,8 @@ export default function ProjectsPage() {
                     </div>
                 </div>
             ) : (
-                <main className="flex-1 overflow-y-auto pt-24">
-                    <div className="max-w-[1200px] mx-auto px-6 py-6">
+                <main className="flex-1 overflow-y-auto">
+                    <div className="max-w-[1200px] w-full mx-auto px-6 pt-6 pb-2 flex-shrink-0">
                         <div className="text-center mb-8">
                             <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">
                                 Project Setup
@@ -280,7 +268,7 @@ export default function ProjectsPage() {
                                         "w-full font-semibold py-4 px-6 rounded-xl transition-all disabled:cursor-not-allowed shadow-sm mt-6",
                                         projectName.trim() && designSpecs.length > 0
                                             ? "bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 hover:dark:bg-blue-600 text-white"
-                                            : "bg-slate-300 dark:bg-zinc-800 text-slate-500 dark:text-zinc-600"
+                                            : "bg-slate-300 dark:bg-zinc-800 text-slate-500 dark:text-zinc-600",
                                     )}
                                 >
                                     Create Project
