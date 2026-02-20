@@ -19,10 +19,8 @@ export default function Header() {
     const handleLogout = () => {
         // Clear only the persisted/current project
         clearProjectOnLogout();
-
         // Also clear in-memory state (defensive; clearProjectOnLogout already clears)
         setCurrentProject(null);
-
         // Navigate to login page
         router.push("/login");
     };

@@ -69,14 +69,14 @@ export default function ProjectsPage() {
     const handleCreateProject = () => {
         if (projectName.trim() && designSpecs.length > 0) {
             const newProject: Project & {
-                createdAt: Date;
-                updatedAt: Date;
+                createdAt: string;
+                updatedAt: string;
                 designSpecs: string[];
             } = {
                 id: `proj-${Date.now()}`,
                 name: projectName.trim(),
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
                 designSpecs: designSpecs.map((file) => file.name),
             };
 
@@ -233,7 +233,7 @@ export default function ProjectsPage() {
 
                                     {/* Uploaded Specs List */}
                                     {designSpecs.length > 0 && (
-                                        <div className="space-y-4 mb-4">
+                                        <div className="space-y-4 mb-2">
                                             {designSpecs.map((file, index) => (
                                                 <div
                                                     key={index}
@@ -278,7 +278,7 @@ export default function ProjectsPage() {
                                 {existingProjects.length > 0 && (
                                     <button
                                         onClick={() => setShowNewProject(false)}
-                                        className="w-full text-sm text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mt-4 py-2 transition-colors"
+                                        className="w-full text-sm text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mt-4 pt-2 transition-colors"
                                     >
                                         ← Back to projects
                                     </button>

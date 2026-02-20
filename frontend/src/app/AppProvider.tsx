@@ -1,7 +1,15 @@
 // lib/contexts/app-context.tsx
 "use client";
 
-import { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+    ReactNode,
+    createContext,
+    useContext,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useState,
+} from "react";
 
 /**
  * Minimal AppProvider
@@ -16,8 +24,8 @@ export type Project = {
     id: string;
     name: string;
     description?: string;
-    createdAt: Date;
-    updatedAt: Date;
+    createdAt: string; // ISO string
+    updatedAt: string; // ISO string
     designSpecs: string[]; //TODO: store file metadata here instead of just string
 };
 
@@ -49,47 +57,28 @@ const AppContext = createContext<AppState | undefined>(undefined);
 
 /* ---------- Provider ---------- */
 export default function AppProvider({ children }: { children: ReactNode }) {
+    // lazy inits read storage synchronously on first client render (avoids flicker)
     const [theme, setThemeState] = useState<Theme>(DEFAULTS.theme);
     const [sidebarOpen, setSidebarOpenState] = useState<boolean>(DEFAULTS.sidebarOpen);
     const [currentProject, setCurrentProjectState] = useState<Project | null>(
         DEFAULTS.currentProject,
     );
-    const [hydrated, setHydrated] = useState(false);
 
-    // Hydrate once from localStorage
-    useEffect(() => {
-        try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) {
-                setHydrated(true);
-                return;
-            }
-            const parsed = JSON.parse(raw);
-            if (parsed?.theme) setThemeState(parsed.theme);
-            if (typeof parsed?.sidebarOpen === "boolean") setSidebarOpenState(parsed.sidebarOpen);
-            if (parsed?.currentProject) setCurrentProjectState(parsed.currentProject);
-        } catch (e) {
-            // ignore parse errors
-            console.warn("AppProvider hydrate error", e);
-        } finally {
-            setHydrated(true);
-        }
-    }, []);
+    // Hydrate from storage synchronously before paint to avoid flicker
+    useLayoutEffect(() => {
+        const stored = readStorage();
+        // Only set if values differ to avoid unnecessary updates
+        if (stored.theme !== theme) setThemeState(stored.theme);
+        if (stored.sidebarOpen !== sidebarOpen) setSidebarOpenState(stored.sidebarOpen);
+        if (stored.currentProject !== currentProject) setCurrentProjectState(stored.currentProject);
+        // Note: no dependencies to run only once after mount
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // run once on mount (client only)
 
-    // Persist theme, sidebarOpen, currentProject after hydration
+    // persist whenever these change
     useEffect(() => {
-        if (!hydrated) return;
-        try {
-            const payload = JSON.stringify({
-                theme,
-                sidebarOpen,
-                currentProject,
-            });
-            localStorage.setItem(STORAGE_KEY, payload);
-        } catch (e) {
-            // ignore quota errors
-        }
-    }, [theme, sidebarOpen, currentProject, hydrated]);
+        writeStorage({ theme, sidebarOpen, currentProject });
+    }, [theme, sidebarOpen, currentProject]);
 
     /* ---------- Actions ---------- */
     const setTheme = (t: Theme) => setThemeState(t);
@@ -143,4 +132,52 @@ export function useApp() {
     const ctx = useContext(AppContext);
     if (!ctx) throw new Error("useApp must be used inside AppProvider");
     return ctx;
+}
+
+/* ---------- Helpers ---------- */
+function readStorage(): { theme: Theme; sidebarOpen: boolean; currentProject: Project | null } {
+    try {
+        if (typeof window === "undefined")
+            return {
+                theme: DEFAULTS.theme,
+                sidebarOpen: DEFAULTS.sidebarOpen,
+                currentProject: DEFAULTS.currentProject,
+            };
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw)
+            return {
+                theme: DEFAULTS.theme,
+                sidebarOpen: DEFAULTS.sidebarOpen,
+                currentProject: DEFAULTS.currentProject,
+            };
+        const parsed = JSON.parse(raw);
+        return {
+            theme: (parsed?.theme as Theme) ?? DEFAULTS.theme,
+            sidebarOpen:
+                typeof parsed?.sidebarOpen === "boolean"
+                    ? parsed.sidebarOpen
+                    : DEFAULTS.sidebarOpen,
+            currentProject: parsed?.currentProject ?? DEFAULTS.currentProject,
+        };
+    } catch (e) {
+        console.warn("readStorageSafe error", e);
+        return {
+            theme: DEFAULTS.theme,
+            sidebarOpen: DEFAULTS.sidebarOpen,
+            currentProject: DEFAULTS.currentProject,
+        };
+    }
+}
+
+function writeStorage(payload: {
+    theme: Theme;
+    sidebarOpen: boolean;
+    currentProject: Project | null;
+}) {
+    try {
+        if (typeof window === "undefined") return;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {
+        // ignore quota errors
+    }
 }
