@@ -36,12 +36,6 @@ async def detect_fod(
     model = get_model(model_name)
 
     try:
-        result = model.detect_fod(image)
+        return model.detect_fod(image)
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Detection failed: {str(error)}")
-
-    return DetectionResponse(
-        response=result.raw_response,
-        model=result.model_name,
-        inference_time_ms=result.inference_time_ms
-    )
