@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { FileText, Plus, X, ArrowRight, FolderOpen } from "lucide-react";
 import { useApp, Project } from "@/app/AppProvider";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 // TODO: Replace with API call to fetch projects
 // This is dummy data for development
@@ -111,15 +112,9 @@ export default function ProjectsPage() {
                                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                                     Your Projects
                                 </h2>
-                                <button
-                                    onClick={() => setShowNewProject(true)}
-                                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-600 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-all"
-                                >
-                                    <Plus className="w-4 h-4 text-slate-600 dark:text-zinc-400" />
-                                    <span className="text-sm text-slate-900 dark:text-white font-medium">
-                                        Create New Project
-                                    </span>
-                                </button>
+                                <Button variant="default" size="lg" className="rounded-lg" onClick={() => setShowNewProject(true)}>
+                                    <Plus /> Create New Project
+                                </Button>
                             </div>
                         </div>
                     </div>

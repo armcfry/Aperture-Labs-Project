@@ -1,6 +1,6 @@
 "use client";
 
-import { AppLayout } from "@/components/layout";
+import { AppLayout } from "@/components";
 import AppProvider from "./AppProvider";
 
 /**
