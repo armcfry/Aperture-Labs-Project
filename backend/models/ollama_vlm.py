@@ -6,23 +6,10 @@ import base64
 import io
 import time
 from typing import Optional
-from dataclasses import dataclass
-
 import requests
 from PIL import Image
 
-
-@dataclass
-class DetectionResult:
-    """
-    Class to track state
-    """
-    raw_response: str
-    model_name: str
-    inference_time_ms: float
-
-    def __str__(self) -> str:
-        return self.raw_response
+from schemas.detection import DetectionResponse
 
 
 class OllamaVLM:
@@ -45,7 +32,7 @@ class OllamaVLM:
         except requests.exceptions.ConnectionError:
             return False
 
-    def detect_fod(self, image: Image.Image, prompt: Optional[str] = None) -> DetectionResult:
+    def detect_fod(self, image: Image.Image, prompt: Optional[str] = None) -> DetectionResponse:
         """
         Analyze an image for Foreign Object Debris using the configured VLM.
 
@@ -54,7 +41,7 @@ class OllamaVLM:
             prompt: Custom prompt for the VLM. If None, uses default FOD detection prompt.
 
         Returns:
-            DetectionResult containing the model's response, model name, and inference time.
+            DetectionResponse containing the model's response, model name, and inference time.
         """
         if not self.is_loaded:
             self.load_model()
@@ -87,16 +74,16 @@ class OllamaVLM:
         if response.status_code == 200:
             raw_response = response.json().get("response", "")
             print(raw_response)
-            return DetectionResult(
-                raw_response=raw_response,
-                model_name=self.model_name,
+            return DetectionResponse(
+                response=raw_response,
+                model=self.model_name,
                 inference_time_ms=inference_time
             )
         else:
             error = f"Error: {response.status_code}"
-            return DetectionResult(
-                raw_response=error,
-                model_name=self.model_name,
+            return DetectionResponse(
+                response=error,
+                model=self.model_name,
                 inference_time_ms=inference_time
             )
 
