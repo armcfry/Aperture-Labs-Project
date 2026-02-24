@@ -80,6 +80,17 @@ export default function AppProvider({ children }: { children: ReactNode }) {
         writeStorage({ theme, sidebarOpen, currentProject });
     }, [theme, sidebarOpen, currentProject]);
 
+    // Apply dark mode class to <html> for Tailwind dark: variants and CSS variables
+    useEffect(() => {
+        if (typeof document === "undefined") return;
+        const root = document.documentElement;
+        if (theme === "dark") {
+            root.classList.add("dark");
+        } else {
+            root.classList.remove("dark");
+        }
+    }, [theme]);
+
     /* ---------- Actions ---------- */
     const setTheme = (t: Theme) => setThemeState(t);
 

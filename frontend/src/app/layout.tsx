@@ -7,6 +7,19 @@ export const metadata: Metadata = {
     description: "General Local Anomoly Detection Observation System",
 };
 
+const themeScript = `
+(function() {
+    try {
+        var s = localStorage.getItem('gladosApp:state');
+        if (s) {
+            var p = JSON.parse(s);
+            if (p.theme === 'dark') document.documentElement.classList.add('dark');
+            else document.documentElement.classList.remove('dark');
+        }
+    } catch (e) {}
+})();
+`;
+
 export default function RootLayout({
     children,
 }: Readonly<{
@@ -15,6 +28,7 @@ export default function RootLayout({
     return (
         <html lang="en" suppressHydrationWarning className="overscroll-none">
             <body className="antialiased">
+                <script dangerouslySetInnerHTML={{ __html: themeScript }} />
                 <ClientRoot>{children}</ClientRoot>
             </body>
         </html>
