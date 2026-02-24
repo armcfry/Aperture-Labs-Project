@@ -1,15 +1,20 @@
 """
-Aperture Labs API - Main Application Entry Point
+GLaDOS - Aperture Labs FOD Detection API
 """
 
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers.detection import router
+from routers.auth import router as auth_router
+from routers.projects import router as projects_router
+from routers.uploads import router as uploads_router
+from routers.detection import router as detection_router
 
 app = FastAPI(
-    title="Aperture Labs API",
-) 
+    title="GLaDOS - FOD Detection API",
+    description="AI Anomaly Detection System for Foreign Object Debris",
+    version="1.0.0",
+)
 
 # Configure CORS middleware: This allows the frontend to make requests to the backend
 app.add_middleware(
@@ -20,12 +25,16 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# Adds all the API endpoints from routers folder
-app.include_router(router)
+# Register routers
+app.include_router(auth_router)
+app.include_router(projects_router)
+app.include_router(uploads_router)
+app.include_router(detection_router)
 
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to Aperture Labs Defect Detection API",
-        "docs": "/docs", # Swagger docs
+        "message": "Welcome to GLaDOS - FOD Detection API",
+        "version": "1.0.0",
+        "docs": "/docs",
     }

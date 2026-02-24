@@ -7,7 +7,7 @@ services:
       - "9001:9001"
     volumes:
       - "${HOME}/minio/data:/mnt/data"
-      - "./minio.license:/backend/db/minio.license:ro"
+      - "./backend/db/minio.license:/minio.license:ro"
     command: ["minio", "server", "/mnt/data", "--license", "/minio.license"]
     restart: unless-stopped
   postgres:
