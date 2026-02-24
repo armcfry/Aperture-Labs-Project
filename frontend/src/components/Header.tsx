@@ -9,7 +9,8 @@ import { Activity, FolderOpen, Sun, Moon, LogOut } from "lucide-react";
 import { useApp } from "@/app/AppProvider";
 import { Button } from "@/components/ui/button";
 
-export const headerHeight = "60px"
+export const headerHeight = "60px";
+const projectsPageHeaderHeight = "72px";
 
 export default function Header() {
     const router = useRouter();
@@ -33,60 +34,65 @@ export default function Header() {
         router.push("/projects");
     };
 
-    return (
-        <header className={`fixed top-0 left-0 right-0 z-50 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 h-[${headerHeight}]`}>
-            <div className="max-w-[1800px] mx-auto px-6 py-3">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded flex items-center justify-center">
-                                <Activity className="text-white" strokeWidth={2.5} size={18} />
-                            </div>
-                            <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-                                GLaDOS
-                            </h1>
-                        </div>
+    const isProjectsPage = pathname === "/projects";
+    const showProjectSwitch = currentProject && !isProjectsPage;
+    const headerH = isProjectsPage ? projectsPageHeaderHeight : headerHeight;
 
-                        {/* Current Project Display */}
-                        {currentProject && (
-                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-zinc-800 rounded-lg border border-slate-200 dark:border-zinc-700">
-                                <FolderOpen className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                                <span className="text-sm font-medium text-slate-900 dark:text-white">
-                                    {currentProject.name}
-                                </span>
-                                <Button
-                                    onClick={handleSwitchProject}
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-xs h-auto py-0 px-2 ml-2 text-muted-foreground hover:text-primary"
-                                >
-                                    Switch
-                                </Button>
-                            </div>
-                        )}
+    return (
+        <header
+            className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800"
+            style={{ height: headerH }}
+        >
+            <div className="flex w-full h-full items-center">
+                <div className="w-[400px] flex-shrink-0 px-6 flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded flex items-center justify-center">
+                            <Activity className="text-white" strokeWidth={2.5} size={18} />
+                        </div>
+                        <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+                            GLaDOS
+                        </h1>
                     </div>
 
-                    {/* Right side */}
-                    <div className="flex items-center gap-0">
+                    {/* Current Project Display - hidden on /projects page */}
+                    {showProjectSwitch && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-zinc-800 rounded-md border border-slate-200 dark:border-zinc-700 whitespace-nowrap">
+                            <FolderOpen className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                            <span className="text-xs font-medium text-slate-900 dark:text-white">
+                                {currentProject.name}
+                            </span>
+                            <Button
+                                onClick={handleSwitchProject}
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs h-6 py-0 px-1.5 flex-shrink-0 text-muted-foreground hover:text-primary"
+                            >
+                                Switch
+                            </Button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right side */}
+                <div className="flex-1 flex items-center justify-end px-6 gap-0">
+                    <Button
+                        onClick={toggleTheme}
+                        variant="ghost"
+                        size="icon"
+                        title="Toggle theme"
+                    >
+                        {theme === "dark" ? <Sun /> : <Moon />}
+                    </Button>
+                    {pathname !== "/login" && (
                         <Button
-                            onClick={toggleTheme}
+                            onClick={handleLogout}
                             variant="ghost"
                             size="icon"
-                            title="Toggle theme"
+                            title="Logout"
                         >
-                            {theme === "dark" ? <Sun /> : <Moon />}
+                            <LogOut />
                         </Button>
-                        {pathname !== "/login" && (
-                            <Button
-                                onClick={handleLogout}
-                                variant="ghost"
-                                size="icon"
-                                title="Logout"
-                            >
-                                <LogOut />
-                            </Button>
-                        )}
-                    </div>
+                    )}
                 </div>
             </div>
         </header>

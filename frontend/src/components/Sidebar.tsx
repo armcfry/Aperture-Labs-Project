@@ -1,135 +1,79 @@
 "use client";
 
 import { useApp } from "@/app/AppProvider";
-import { HistoryIcon, Plus, X } from "lucide-react";
+import { HistoryIcon, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader } from "./ui/card";
+import { useCallback, useEffect, useState } from "react";
+import {
+    getAllInspections,
+    deriveStatus,
+    INSPECTION_UPDATE_EVENT,
+    type InspectionResult,
+} from "@/lib/inspection-store";
 import { Badge } from "./ui/badge";
 
 export type HistoryItem = {
     id: string;
-    project: string; // Corresponding project name
+    project: string;
     timestamp: string;
     status: "pass" | "fail";
     photo: string;
     defectCount?: number;
 };
 
+function inspectionToHistoryItem(r: InspectionResult): HistoryItem {
+    return {
+        id: r.id,
+        project: r.projectName ?? "Unknown Project",
+        timestamp: r.timestamp,
+        status: deriveStatus(r.response),
+        photo: r.imageUrl,
+    };
+}
+
 export default function Sidebar() {
     const router = useRouter();
     const { currentProject } = useApp();
+    const [inspections, setInspections] = useState<HistoryItem[]>([]);
 
-    // Dummy history for PoC — later replace with API call:
-    // fetch(`/api/projects/${projectId}/history`) -> setHistory(...)
-    const projectName = currentProject?.name ?? "Unknown Project";
-    const now = new Date();
-    const inspections: HistoryItem[] = [
-        {
-            id: "h-001",
-            project: projectName,
-            timestamp: now.toISOString(),
-            status: "fail",
-            photo: "https://picsum.photos/300/200?random=11",
-            defectCount: 3,
-        },
-        {
-            id: "h-002",
-            project: projectName,
-            timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 24).toISOString(),
-            status: "pass",
-            photo: "https://picsum.photos/300/200?random=12",
-            defectCount: 0,
-        },
-        {
-            id: "h-003",
-            project: projectName,
-            timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 24 * 2).toISOString(),
-            status: "fail",
-            photo: "https://picsum.photos/300/200?random=13",
-            defectCount: 1,
-        },
-        {
-            id: "h-001",
-            project: projectName,
-            timestamp: now.toISOString(),
-            status: "fail",
-            photo: "https://picsum.photos/300/200?random=11",
-            defectCount: 3,
-        },
-        {
-            id: "h-002",
-            project: projectName,
-            timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 24).toISOString(),
-            status: "pass",
-            photo: "https://picsum.photos/300/200?random=12",
-            defectCount: 0,
-        },
-        {
-            id: "h-003",
-            project: projectName,
-            timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 24 * 2).toISOString(),
-            status: "fail",
-            photo: "https://picsum.photos/300/200?random=13",
-            defectCount: 1,
-        },
-        {
-            id: "h-001",
-            project: projectName,
-            timestamp: now.toISOString(),
-            status: "fail",
-            photo: "https://picsum.photos/300/200?random=11",
-            defectCount: 3,
-        },
-        {
-            id: "h-002",
-            project: projectName,
-            timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 24).toISOString(),
-            status: "pass",
-            photo: "https://picsum.photos/300/200?random=12",
-            defectCount: 0,
-        },
-        {
-            id: "h-003",
-            project: projectName,
-            timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 24 * 2).toISOString(),
-            status: "fail",
-            photo: "https://picsum.photos/300/200?random=13",
-            defectCount: 1,
-        },
-    ];
+    const loadInspections = useCallback(() => {
+        const all = getAllInspections();
+        setInspections(all.map(inspectionToHistoryItem));
+    }, []);
 
     useEffect(() => {
-        // Placeholder: load history for currentProject
-        // if (currentProject) {
-        //   fetch(`/api/projects/${currentProject.id}/history`).then(...)
-        // }
-    }, [currentProject]);
+        loadInspections();
+        const handleUpdate = () => loadInspections();
+        window.addEventListener(INSPECTION_UPDATE_EVENT, handleUpdate);
+        return () => window.removeEventListener(INSPECTION_UPDATE_EVENT, handleUpdate);
+    }, [loadInspections]);
 
-    // Handler for when user clicks a history item
     const handleView = (id: string) => {
         router.push(`/inspect/result/${id}`);
     };
 
     const handleNew = () => {
-        // Signal the page to show the new inspection form using a query param.
-        // This keeps the sidebar prop-free.
         router.push("/inspect");
     };
 
     return (
-        <aside className="h-full flex flex-col bg-white dark:bg-zinc-900 border-r border-slate-200 dark:border-zinc-800 p-6 w-[290px]">
+        <aside className="h-full w-full flex flex-col bg-white dark:bg-zinc-900 border-r border-slate-200 dark:border-zinc-800 p-6">
             {/* Fixed header */}
             <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Inspections</h2>
-                <Button onClick={handleNew} size="sm" variant="outline" className="flex flex-row">
-                    <Plus className="w-4 h-4" /> New
-                </Button>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                    History
+                </h2>
+                <button
+                    onClick={handleNew}
+                    className="px-3 py-1.5 text-sm border border-slate-300 dark:border-zinc-700 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors text-slate-700 dark:text-zinc-300 flex items-center gap-1"
+                >
+                    <Plus className="w-4 h-4" />
+                    New
+                </button>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto">
-                <div className="space-y-3">
+                <div className="space-y-2">
                     {!currentProject || inspections.length === 0 ? (
                         <div className="text-center py-12">
                             <HistoryIcon className="w-12 h-12 text-slate-300 dark:text-zinc-700 mx-auto mb-3" />
@@ -138,75 +82,59 @@ export default function Sidebar() {
                             </p>
                         </div>
                     ) : (
-                        // Map inspection history item
                         inspections.map((item) => {
                             const date = new Date(item.timestamp);
                             return (
-                                <Card key={item.id} onClick={() => handleView(item.id)}
-                                    className="relative group cursor-pointer transition-all h-16 hover:shadow-md hover:border-slate-300 dark:hover:border-zinc-700"
+                                <button
+                                    key={item.id}
+                                    onClick={() => handleView(item.id)}
+                                    className="w-full text-left p-3 rounded-lg border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors group"
                                 >
-                                    <CardContent className="p-0">
-                                        <div className="flex gap-1">
-                                            {/* LEFT IMAGE */}
-                                            <div className="w-16 h-16 flex-shrink-0 overflow-hidden rounded-l-lg">
-                                                <img
-                                                    src={item.photo}
-                                                    alt="inspection"
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
+                                    <div className="flex gap-3 mb-2">
+                                        {/* Thumbnail */}
+                                        <div className="w-12 h-12 rounded overflow-hidden bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex-shrink-0">
+                                            <img
+                                                src={item.photo}
+                                                alt="Product thumbnail"
+                                                className="w-full h-full object-cover"
+                                            />
+                                        </div>
 
-                                            {/* RIGHT CONTENT */}
-                                            <div className="flex-1 p-2 flex flex-col justify-start">
-                                                <div className="text-xs font-semibold text-slate-900 dark:text-white">
+                                        {/* Info */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between mb-1">
+                                                <span className="text-sm font-semibold text-slate-900 dark:text-white">
                                                     {date.toLocaleDateString("en-US", {
                                                         month: "short",
                                                         day: "numeric",
                                                         year: "numeric",
                                                     })}
-                                                    <>  </>
-                                                    {date.toLocaleTimeString("en-US", {
-                                                        hour: "2-digit",
-                                                        minute: "2-digit",
-                                                    })}
-                                                </div>
-
-                                                <div className="flex items-center gap-2 mt-2">
-                                                    {/* STATUS BADGE */}
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className={
-                                                            item.status === "pass"
-                                                                ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
-                                                                : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
-                                                        }
-                                                    >
-                                                        {item.status === "pass" ? "Pass" : "Fail"}
-                                                    </Badge>
-
-                                                    {/* DEFECT COUNT */}
-                                                    {item.status === "fail" && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {item.defectCount ?? 0} {item.defectCount === 1 ? "defect" : "defects"}
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-500 dark:text-zinc-500">
+                                                {date.toLocaleTimeString("en-US", {
+                                                    hour: "2-digit",
+                                                    minute: "2-digit",
+                                                })}
+                                            </p>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <Badge
+                                                    variant="secondary"
+                                                    className={
+                                                        item.status === "pass"
+                                                            ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                                                            : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                                                    }
+                                                >
+                                                    {item.status === "pass"
+                                                        ? "Pass"
+                                                        : "Fail"}
+                                                </Badge>
                                             </div>
                                         </div>
-
-                                        {/* DELETE BUTTON (appears on hover) */}
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                console.log("delete", item.id);
-                                            }}
-                                            className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        >
-                                            <X className="w-5 h-5 text-muted-foreground hover:text-red-500 transition-colors" />
-                                        </button>
-                                    </CardContent>
-                                </Card>
-                            )
+                                    </div>
+                                </button>
+                            );
                         })
                     )}
                 </div>
