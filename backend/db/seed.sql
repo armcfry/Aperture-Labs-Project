@@ -1,4 +1,5 @@
 BEGIN;
+
 --==============================================
 -- insert sample data for all tables
 
@@ -143,8 +144,8 @@ INSERT INTO submissions (
     NULL
 );
 
--- anomolies
-INSERT INTO anomolies (
+-- anomalies
+INSERT INTO anomalies (
     id, submission_id, label, description, severity, confidence, created_at
 ) VALUES
 (

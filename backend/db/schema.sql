@@ -84,7 +84,7 @@ CREATE TABLE submissions (
 );
 
 -- anomalies (depends on submissions)
-CREATE TABLE anomolies (
+CREATE TABLE anomalies (
     id UUID PRIMARY KEY,
     submission_id UUID NOT NULL,
     label VARCHAR NOT NULL,
@@ -93,15 +93,15 @@ CREATE TABLE anomolies (
     confidence DOUBLE PRECISION,
     created_at TIMESTAMPTZ NOT NULL,
 
-    CONSTRAINT fk_anomolies_submission
+    CONSTRAINT fk_anomalies_submission
         FOREIGN KEY (submission_id)
         REFERENCES submissions(id)
         ON DELETE CASCADE,
 
-    CONSTRAINT anomolies_severity_check
+    CONSTRAINT anomalies_severity_check
         CHECK (severity IS NULL OR severity IN ('low', 'med', 'high')),
 
-    CONSTRAINT anomolies_confidence_check
+    CONSTRAINT anomalies_confidence_check
         CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1))
 );
 
