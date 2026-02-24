@@ -34,7 +34,7 @@ export default function Header() {
     };
 
     const isProjectsPage = pathname === "/projects";
-    const showProjectSwitch = currentProject && !isProjectsPage;
+    const showProjectArea = !isProjectsPage;
 
     return (
         <header
@@ -52,21 +52,34 @@ export default function Header() {
                         </h1>
                     </div>
 
-                    {/* Current Project Display - hidden on /projects page */}
-                    {showProjectSwitch && (
+                    {/* Project display or Select Project - hidden on /projects page */}
+                    {showProjectArea && (
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-zinc-800 rounded-md border border-slate-200 dark:border-zinc-700 whitespace-nowrap">
                             <FolderOpen className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                            <span className="text-xs font-medium text-slate-900 dark:text-white">
-                                {currentProject.name}
-                            </span>
-                            <Button
-                                onClick={handleSwitchProject}
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs h-6 py-0 px-1.5 flex-shrink-0 text-muted-foreground hover:text-primary"
-                            >
-                                Switch
-                            </Button>
+                            {currentProject ? (
+                                <>
+                                    <span className="text-xs font-medium text-slate-900 dark:text-white">
+                                        {currentProject.name}
+                                    </span>
+                                    <Button
+                                        onClick={handleSwitchProject}
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-xs h-6 py-0 px-1.5 flex-shrink-0 text-muted-foreground hover:text-primary"
+                                    >
+                                        Switch
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button
+                                    onClick={handleSwitchProject}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-xs h-6 py-0 px-1.5 flex-shrink-0 text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-medium"
+                                >
+                                    Select Project
+                                </Button>
+                            )}
                         </div>
                     )}
                 </div>
