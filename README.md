@@ -51,7 +51,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3998](http://localhost:3998) with your browser to see the result.
+
+See [frontend/README.md](frontend/README.md) for more details.
 
 ## API
 

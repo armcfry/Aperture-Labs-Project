@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GLaDOS Frontend
 
-## Getting Started
+AI-powered anomaly detection and quality inspection UI for the Aperture Labs FOD detection project.
 
-First, run the development server:
+## Prerequisites
+
+- **Node.js** 22.13+ (or 20.19+)
+- **npm** 9.0+
+
+Use [nvm](https://github.com/nvm-sh/nvm) to install or switch Node versions if needed.
+
+## Quick Start
+
+### 1. Install dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### 2. Run the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app will be available at **http://localhost:3998**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. (Optional) Run with Turbopack (faster rebuilds)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev:turbopack
+```
 
-## Learn More
+## Available Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server on port 3998 |
+| `npm run dev:turbopack` | Start dev server with Turbopack |
+| `npm run build` | Build for production |
+| `npm run start` | Run production build |
+| `npm run lint` | Run ESLint |
+| `npm run lint -- --fix` | Fix lint issues |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment Variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create a `.env.local` file in the frontend directory to override defaults:
 
-## Deploy on Vercel
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend FOD detection API base URL |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Example:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+# .env.local
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+## Backend
+
+The frontend calls the FOD detection API for image analysis. Ensure the backend is running before using the Inspect feature:
+
+```bash
+# From project root
+cd backend
+run.bat
+```
+
+API docs: http://localhost:8000/docs
+
+## App Flow
+
+1. **Login** → Sign in
+2. **Projects** → Select or create a project with design specs
+3. **Inspect** → Upload product photos, run analysis, view history
+4. **Results** → View inspection reports with defect markers and severity
