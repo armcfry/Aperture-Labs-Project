@@ -7,8 +7,6 @@ import Header, { headerHeight } from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import { usePathname } from "next/navigation";
 
-const projectsPageHeaderHeight = "72px";
-
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
 
@@ -16,7 +14,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
     const isLoginPage = pathname === "/login";
     const isProjectsPage = pathname === "/projects";
-    const effectiveHeaderHeight = isProjectsPage ? projectsPageHeaderHeight : headerHeight;
 
     return (
         <div className="flex flex-col min-h-screen w-full bg-background">
@@ -24,10 +21,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {!isLoginPage && (<Header />)}
 
             {/* Body container */}
-            <div className="flex flex-row flex-1 min-h-0 w-full" style={isLoginPage ? undefined : { paddingTop: effectiveHeaderHeight }}>
+            <div
+                className="flex flex-row flex-1 min-h-0 w-full"
+                style={isLoginPage ? undefined : { paddingTop: headerHeight }}>
                 {!isLoginPage && !isProjectsPage && (
                     <div className="flex-shrink-0" style={{ width: sidebarWidth }}>
-                        <div className="sticky" style={{ top: effectiveHeaderHeight, height: `calc(100vh - ${effectiveHeaderHeight})` }}>
+                        <div className="sticky" style={{ top: headerHeight, height: `calc(100vh - ${headerHeight})` }}>
                             <Sidebar />
                         </div>
                     </div>

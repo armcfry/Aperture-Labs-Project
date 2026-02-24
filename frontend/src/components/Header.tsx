@@ -10,7 +10,6 @@ import { useApp } from "@/app/AppProvider";
 import { Button } from "@/components/ui/button";
 
 export const headerHeight = "60px";
-const projectsPageHeaderHeight = "72px";
 
 export default function Header() {
     const router = useRouter();
@@ -36,15 +35,14 @@ export default function Header() {
 
     const isProjectsPage = pathname === "/projects";
     const showProjectSwitch = currentProject && !isProjectsPage;
-    const headerH = isProjectsPage ? projectsPageHeaderHeight : headerHeight;
 
     return (
         <header
             className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800"
-            style={{ height: headerH }}
+            style={{ height: headerHeight }}
         >
-            <div className="flex w-full h-full items-center">
-                <div className="w-[400px] flex-shrink-0 px-6 flex items-center gap-4">
+            <div className="flex w-full h-full items-center px-6">
+                <div className="w-[400px] flex-shrink-0 flex items-center gap-4">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded flex items-center justify-center">
                             <Activity className="text-white" strokeWidth={2.5} size={18} />
@@ -73,8 +71,11 @@ export default function Header() {
                     )}
                 </div>
 
-                {/* Right side */}
-                <div className="flex-1 flex items-center justify-end px-6 gap-0">
+                {/* CENTER (flex filler) - keeps layout stable and allows left to be left-aligned */}
+                <div className="flex-1" />
+
+                {/* RIGHT: actions (separate sibling, not inside left container) */}
+                <div className="w-[400px] flex-shrink-0 flex items-center justify-end gap-0">
                     <Button
                         onClick={toggleTheme}
                         variant="ghost"
