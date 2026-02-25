@@ -110,6 +110,12 @@ export default function AppProvider({ children }: { children: ReactNode }) {
     const clearProjectOnLogout = () => {
         setCurrentProjectState(null);
         try {
+            if (
+                typeof localStorage === "undefined" ||
+                typeof localStorage.getItem !== "function" ||
+                typeof localStorage.setItem !== "function"
+            )
+                return;
             const raw = localStorage.getItem(STORAGE_KEY);
             if (!raw) return;
             const parsed = JSON.parse(raw);
@@ -148,7 +154,11 @@ export function useApp() {
 /* ---------- Helpers ---------- */
 function readStorage(): { theme: Theme; sidebarOpen: boolean; currentProject: Project | null } {
     try {
-        if (typeof window === "undefined")
+        if (
+            typeof window === "undefined" ||
+            typeof localStorage === "undefined" ||
+            typeof localStorage.getItem !== "function"
+        )
             return {
                 theme: DEFAULTS.theme,
                 sidebarOpen: DEFAULTS.sidebarOpen,
@@ -186,7 +196,12 @@ function writeStorage(payload: {
     currentProject: Project | null;
 }) {
     try {
-        if (typeof window === "undefined") return;
+        if (
+            typeof window === "undefined" ||
+            typeof localStorage === "undefined" ||
+            typeof localStorage.setItem !== "function"
+        )
+            return;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) {
         // ignore quota errors

@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 const themeScript = `
 (function() {
     try {
+        if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return;
         var s = localStorage.getItem('gladosApp:state');
         if (s) {
             var p = JSON.parse(s);

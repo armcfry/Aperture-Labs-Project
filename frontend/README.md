@@ -4,10 +4,10 @@ AI-powered anomaly detection and quality inspection UI for the Aperture Labs FOD
 
 ## Prerequisites
 
-- **Node.js** 22.13+ (or 20.19+)
+- **Node.js** 22.13.0 (LTS)
 - **npm** 9.0+
 
-Use [nvm](https://github.com/nvm-sh/nvm) to install or switch Node versions if needed.
+Use [nvm](https://github.com/nvm-sh/nvm) to install or switch Node versions. From the frontend directory, run `nvm use` to pick up the pinned version.
 
 ## Quick Start
 

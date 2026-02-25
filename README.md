@@ -4,8 +4,6 @@ CSCI 577A Spring 2026 Group Project
 
 Foreign Object Debris (FOD) detection using Vision Language Models.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for merge guidelines (what to merge into `main` vs. skip).
-
 ## Getting Started
 
 ### Backend Setup
@@ -39,7 +37,7 @@ run.bat
 
 #### 1. Install Node.js
 
-Ensure you have node 22.13+ and npm v10+ installed. Use nvm to install or update your node version if necessary.
+Ensure you have Node.js 22.13.0 (LTS). Use nvm to install or switch versions; run `nvm use` from the frontend directory.
 
 #### 2. Install packages
 
