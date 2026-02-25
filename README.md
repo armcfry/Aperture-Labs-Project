@@ -4,7 +4,9 @@ CSCI 577A Spring 2026 Group Project
 
 Foreign Object Debris (FOD) detection using Vision Language Models.
 
-## Setup
+## Getting Started
+
+### Backend Setup
 
 #### 1. Install Ollama
 
@@ -30,6 +32,28 @@ setup.bat
 cd backend
 run.bat
 ```
+
+### Frontend Setup
+
+#### 1. Install Node.js
+
+Ensure you have Node.js 22.13.0 (LTS). Use nvm to install or switch versions; run `nvm use` from the frontend directory.
+
+#### 2. Install packages
+
+```bash
+cd frontend
+npm install
+```
+
+#### 3. Run the development server
+```bash
+npm run dev
+```
+
+Open [http://localhost:3998](http://localhost:3998) with your browser to see the result.
+
+See [frontend/README.md](frontend/README.md) for more details.
 
 ## API
 
@@ -102,16 +126,16 @@ curl.exe -X POST "http://localhost:8000/api/upload/image?project_id=YOUR_PROJECT
 
 ## Using docker to spin up the database containers
 
-### 1. Make sure you have docker desktop installed.
-### 2. Install docker cli.
-### 3. Spin up containers
+#### 1. Make sure you have docker desktop installed.
+#### 2. Install docker cli.
+#### 3. Spin up containers
 
     docker compose up -d
 
 This will create two containers. One contains the postgres database, the other holds the minio storage. In the /backend/db/init.sql, two tables are created in the postgres db. One for `users` and the other for `fod_detection` (subject to change.) Database information will persist unless the volumes are deleted.
 
-### 4. To stop running containers (not remove volume)
+#### 4. To stop running containers (not remove volume)
     docker compose stop
 
-### 5. To remove the containers and remove the volumes:
+#### 5. To remove the containers and remove the volumes:
     docker compose down -v
