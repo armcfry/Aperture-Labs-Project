@@ -9,6 +9,14 @@ from routers.auth import router as auth_router
 from routers.projects import router as projects_router
 from routers.uploads import router as uploads_router
 from routers.detection import router as detection_router
+from core import exceptions
+from core.exception_handlers import (
+    project_not_found_handler,
+    permission_denied_handler,
+    conflict_error_handler,
+    invalid_state_transition_handler,
+)
+
 
 app = FastAPI(
     title="GLaDOS - FOD Detection API",
@@ -30,6 +38,27 @@ app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(uploads_router)
 app.include_router(detection_router)
+
+# register global exception handlers
+app.add_exception_handler(
+    exceptions.ProjectNotFound,
+    project_not_found_handler,
+)
+
+app.add_exception_handler(
+    exceptions.PermissionDenied,
+    permission_denied_handler,
+)
+
+app.add_exception_handler(
+    exceptions.ConflictError,
+    conflict_error_handler,
+)
+
+app.add_exception_handler(
+    exceptions.InvalidStateTransition,
+    invalid_state_transition_handler,
+)
 
 @app.get("/")
 async def root():
