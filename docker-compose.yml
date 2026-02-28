@@ -3,7 +3,7 @@ services:
     image: quay.io/minio/aistor/minio:latest
     container_name: minio
     ports:
-      - "9000:9000"
+      - "9002:9000"
       - "9001:9001"
     volumes:
       - "${HOME}/minio/data:/mnt/data"
@@ -19,5 +19,18 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # sonarqube:
+  #   image: sonarqube:community
+  #   ports:
+  #     - "9000:9000"
+  #   environment:
+  #     - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+  #   volumes:
+  #     - sonarqube_data:/opt/sonarqube/data
+  #     - sonarqube_logs:/opt/sonarqube/logs
+
 volumes:
   postgres_data:
+  # sonarqube_data:
+  # sonarqube_logs:
