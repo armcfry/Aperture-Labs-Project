@@ -6,6 +6,10 @@ Foreign Object Debris (FOD) detection using Vision Language Models.
 
 ## Getting Started
 
+### For Code Quality Metrics
+
+SonarQube: https://sonarcloud.io/project/overview?id=Aperture-Labs-SP-26_Aperture-Labs-Project
+
 ### Backend Setup
 
 #### 1. Install Ollama
