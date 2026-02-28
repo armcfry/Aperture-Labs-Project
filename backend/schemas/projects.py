@@ -1,29 +1,37 @@
-from pydantic import BaseModel
+import uuid
 from datetime import datetime
+from pydantic import BaseModel, ConfigDict
 
 
-class DesignSpec(BaseModel):
-    filename: str
-    object_key: str
-    uploaded_at: datetime
-
-
-class ProjectCreate(BaseModel):
+class ProjectBase(BaseModel):
     name: str
+    description: str | None = None
 
 
-class Project(BaseModel):
-    id: str
-    name: str
+class ProjectCreate(ProjectBase):
+    pass
+
+
+class ProjectUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    archived_at: datetime | None = None
+
+
+class ProjectRead(ProjectBase):
+    id: uuid.UUID
+    created_by_user_id: uuid.UUID | None
     created_at: datetime
-    design_specs: list[DesignSpec] = []
+    updated_at: datetime
+    archived_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
-class ProjectListResponse(BaseModel):
-    projects: list[Project]
-
-
+# -------------------------
+# Upload-related schemas
+# -------------------------
 class UploadResponse(BaseModel):
     filename: str
-    project_id: str
+    project_id: uuid.UUID
     object_key: str
