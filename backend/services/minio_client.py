@@ -76,3 +76,22 @@ def get_file(bucket: str, object_name: str) -> bytes:
 def delete_file(bucket: str, object_name: str) -> None:
     client = get_client()
     client.remove_object(bucket, object_name)
+
+
+def create_project_bucket(project_id: str) -> None:
+    """Create a bucket for a project."""
+    ensure_bucket(project_id)
+
+
+def delete_project_bucket(project_id: str) -> None:
+    """Delete a project's bucket and all its contents."""
+    client = get_client()
+    bucket = project_id
+    if not client.bucket_exists(bucket):
+        return
+    # Remove all objects first
+    objects = client.list_objects(bucket, recursive=True)
+    for obj in objects:
+        client.remove_object(bucket, obj.object_name)
+    # Then remove the bucket
+    client.remove_bucket(bucket)

@@ -71,18 +71,14 @@ class TestProjectSchemas:
 
     def test_project_base_with_all_fields(self):
         """Test ProjectBase with all fields."""
-        obj_key = uuid.uuid4()
         project = ProjectBase(
             name="Test Project",
             description="A test project",
-            bucket_name="test-bucket",
-            object_key=obj_key,
             detector_version="1.0.0",
         )
         assert project.name == "Test Project"
         assert project.description == "A test project"
-        assert project.bucket_name == "test-bucket"
-        assert project.object_key == obj_key
+        assert project.detector_version == "1.0.0"
 
     def test_project_create(self):
         """Test ProjectCreate schema."""
@@ -157,7 +153,7 @@ class TestSubmissionSchemas:
     def test_submission_base(self):
         """Test SubmissionBase schema."""
         project_id = uuid.uuid4()
-        image_id = uuid.uuid4()
+        image_id = f"{project_id}/images/test.png"
         submission = SubmissionBase(project_id=project_id, image_id=image_id)
         assert submission.project_id == project_id
         assert submission.image_id == image_id
@@ -165,7 +161,7 @@ class TestSubmissionSchemas:
     def test_submission_create(self):
         """Test SubmissionCreate schema."""
         project_id = uuid.uuid4()
-        image_id = uuid.uuid4()
+        image_id = f"{project_id}/images/test.png"
         user_id = uuid.uuid4()
         submission = SubmissionCreate(
             project_id=project_id, image_id=image_id, submitted_by_user_id=user_id
@@ -181,10 +177,11 @@ class TestSubmissionSchemas:
     def test_submission_read(self):
         """Test SubmissionRead schema."""
         now = datetime.now()
+        project_id = uuid.uuid4()
         submission = SubmissionRead(
             id=uuid.uuid4(),
-            project_id=uuid.uuid4(),
-            image_id=uuid.uuid4(),
+            project_id=project_id,
+            image_id=f"{project_id}/images/test.png",
             submitted_by_user_id=uuid.uuid4(),
             submitted_at=now,
             status=SubmissionStatus.queued,

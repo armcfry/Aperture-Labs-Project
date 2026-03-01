@@ -58,8 +58,6 @@ class TestProjectModel:
     def test_project_has_optional_columns(self):
         """Test Project has optional columns."""
         columns = [c.name for c in Project.__table__.columns]
-        assert "bucket_name" in columns
-        assert "object_key" in columns
         assert "detector_version" in columns
         assert "created_by_user_id" in columns
 
