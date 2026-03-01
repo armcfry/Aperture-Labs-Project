@@ -25,5 +25,12 @@ Thumbs.db
 # Logs
 *.log
 
+# Coverage
+code_coverage/
+coverage/
+htmlcov/
+.coverage
+*.cover
+
 #Figma
 AI Anomaly Detection Tool
