@@ -1,14 +1,8 @@
 import io
+from datetime import timedelta
 from minio import Minio
-from minio.error import S3Error
 
-MINIO_ENDPOINT = "localhost:9000"
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin"
-MINIO_SECURE = False
-
-BUCKET_DESIGNS = "fod-designs"
-BUCKET_IMAGES = "fod-images"
+from core.config import settings
 
 _client: Minio | None = None
 
@@ -17,10 +11,10 @@ def get_client() -> Minio:
     global _client
     if _client is None:
         _client = Minio(
-            MINIO_ENDPOINT,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=MINIO_SECURE,
+            settings.MINIO_ENDPOINT,
+            access_key=settings.MINIO_ACCESS_KEY,
+            secret_key=settings.MINIO_SECRET_KEY,
+            secure=settings.MINIO_USE_SSL,
         )
     return _client
 
@@ -32,7 +26,10 @@ def ensure_bucket(bucket_name: str) -> None:
 
 
 def upload_file(
-    bucket: str, object_name: str, file_data: bytes, content_type: str
+    bucket: str,
+    object_name: str,
+    file_data: bytes,
+    content_type: str,
 ) -> str:
     client = get_client()
     ensure_bucket(bucket)
@@ -43,7 +40,27 @@ def upload_file(
         length=len(file_data),
         content_type=content_type,
     )
-    return f"{bucket}/{object_name}"
+    return object_name  # just the object name, not bucket/object_name
+
+
+def list_objects(bucket: str, prefix: str) -> list[str]:
+    """Return all object names under a given prefix in a bucket."""
+    client = get_client()
+    objects = client.list_objects(bucket, prefix=prefix, recursive=True)
+    return [obj.object_name for obj in objects]
+
+
+def get_presigned_url(
+    bucket: str,
+    object_name: str,
+    expires_seconds: int = 900,
+) -> str:
+    client = get_client()
+    return client.presigned_get_object(
+        bucket,
+        object_name,
+        expires=timedelta(seconds=expires_seconds),
+    )
 
 
 def get_file(bucket: str, object_name: str) -> bytes:
@@ -59,3 +76,22 @@ def get_file(bucket: str, object_name: str) -> bytes:
 def delete_file(bucket: str, object_name: str) -> None:
     client = get_client()
     client.remove_object(bucket, object_name)
+
+
+def create_project_bucket(project_id: str) -> None:
+    """Create a bucket for a project."""
+    ensure_bucket(project_id)
+
+
+def delete_project_bucket(project_id: str) -> None:
+    """Delete a project's bucket and all its contents."""
+    client = get_client()
+    bucket = project_id
+    if not client.bucket_exists(bucket):
+        return
+    # Remove all objects first
+    objects = client.list_objects(bucket, recursive=True)
+    for obj in objects:
+        client.remove_object(bucket, obj.object_name)
+    # Then remove the bucket
+    client.remove_bucket(bucket)
