@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routers.auth import router as auth_router
 from routers.projects import router as projects_router
-from routers.uploads import router as uploads_router
+from routers.storage import router as storage_router
 from routers.detection import router as detection_router
 from routers.users import router as users_router
 from routers.submissions import router as submissions_router
@@ -49,7 +49,7 @@ app.include_router(projects_router)
 app.include_router(project_members_router)
 app.include_router(submissions_router)
 app.include_router(anomalies_router)
-app.include_router(uploads_router)
+app.include_router(storage_router)
 app.include_router(detection_router)
 
 # Register global exception handlers

@@ -1,4 +1,5 @@
 import io
+from datetime import timedelta
 from minio import Minio
 
 from core.config import settings
@@ -39,7 +40,27 @@ def upload_file(
         length=len(file_data),
         content_type=content_type,
     )
-    return f"{bucket}/{object_name}"
+    return object_name  # just the object name, not bucket/object_name
+
+
+def list_objects(bucket: str, prefix: str) -> list[str]:
+    """Return all object names under a given prefix in a bucket."""
+    client = get_client()
+    objects = client.list_objects(bucket, prefix=prefix, recursive=True)
+    return [obj.object_name for obj in objects]
+
+
+def get_presigned_url(
+    bucket: str,
+    object_name: str,
+    expires_seconds: int = 900,
+) -> str:
+    client = get_client()
+    return client.presigned_get_object(
+        bucket,
+        object_name,
+        expires=timedelta(seconds=expires_seconds),
+    )
 
 
 def get_file(bucket: str, object_name: str) -> bytes:

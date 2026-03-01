@@ -6,7 +6,7 @@ from .enums import SubmissionStatus, SubmissionPassFail
 
 class SubmissionBase(BaseModel):
     project_id: uuid.UUID
-    image_id: uuid.UUID
+    image_id: str  # object key e.g. "project-id/my_image.png"
 
 
 class SubmissionCreate(SubmissionBase):
