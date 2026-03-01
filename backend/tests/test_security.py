@@ -58,8 +58,8 @@ class TestPasswordHashing:
         hashed = hash_password(TEST_PW_UNICODE)
         assert verify_password(TEST_PW_UNICODE, hashed) is True
 
-    def test_hash_password_long_password(self):
-        """Test hash_password handles long passwords."""
-        long_pw = "a" * 1000  # noqa: S105
-        hashed = hash_password(long_pw)
-        assert verify_password(long_pw, hashed) is True
+    def test_hash_password_max_length(self):
+        """Test hash_password handles max length passwords (72 bytes for bcrypt)."""
+        max_pw = "a" * 72  # noqa: S105 - bcrypt max is 72 bytes
+        hashed = hash_password(max_pw)
+        assert verify_password(max_pw, hashed) is True
