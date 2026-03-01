@@ -165,15 +165,18 @@ class TestProjectService:
     def test_create_project(self):
         """Test creating a new project."""
         from services import project_service
+        from unittest.mock import patch
 
         mock_db = MagicMock()
         payload = ProjectCreate(name="Test Project", description="A test")
 
-        result = project_service.create_project(mock_db, payload)
+        with patch("services.project_service.minio_client") as mock_minio:
+            result = project_service.create_project(mock_db, payload)
 
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()
         mock_db.refresh.assert_called_once()
+        mock_minio.create_project_bucket.assert_called_once()
 
     def test_get_project_found(self):
         """Test getting an existing project."""
