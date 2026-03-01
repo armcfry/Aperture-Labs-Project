@@ -14,8 +14,6 @@ CREATE TABLE projects (
     id UUID PRIMARY KEY,
     name VARCHAR NOT NULL,
     description TEXT,
-    bucket_name VARCHAR,
-    object_key UUID, -- design spec key
     created_by_user_id UUID NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -57,7 +55,7 @@ CREATE TABLE submissions (
     project_id UUID NOT NULL,
     submitted_by_user_id UUID NOT NULL,
     submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    image_id UUID NOT NULL,
+    image_id VARCHAR NOT NULL,
     status VARCHAR NOT NULL,
     pass_fail VARCHAR NOT NULL,
     anomaly_count INT,

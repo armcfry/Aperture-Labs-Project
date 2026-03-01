@@ -6,17 +6,25 @@ from sqlalchemy.orm import Session
 from db.models import Project
 from schemas.projects import ProjectCreate, ProjectUpdate
 from core import exceptions
+from services import minio_client
 
 
 def create_project(db: Session, payload: ProjectCreate) -> Project:
+    project_id = uuid.uuid4()
+
     project = Project(
-        id=uuid.uuid4(),
+        id=project_id,
         name=payload.name,
         description=payload.description,
+        detector_version=payload.detector_version,
     )
     db.add(project)
     db.commit()
     db.refresh(project)
+
+    # Create the MinIO bucket for this project
+    minio_client.create_project_bucket(str(project_id))
+
     return project
 
 
@@ -48,6 +56,8 @@ def update_project(
         project.name = payload.name
     if payload.description is not None:
         project.description = payload.description
+    if payload.detector_version is not None:
+        project.detector_version = payload.detector_version
     if payload.archived_at is not None:
         project.archived_at = payload.archived_at
 
@@ -61,6 +71,13 @@ def delete_project(db: Session, project_id: uuid.UUID) -> None:
     project = get_project(db, project_id)
     db.delete(project)
     db.commit()
+
+    # Clean up the MinIO bucket and all its contents
+    try:
+        minio_client.delete_project_bucket(str(project_id))
+    except Exception:
+        # Don't fail the delete if MinIO cleanup fails
+        pass
 
 
 def archive_project(db: Session, project_id: uuid.UUID) -> Project:

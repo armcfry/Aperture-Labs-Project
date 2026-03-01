@@ -66,8 +66,6 @@ class Project(Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    bucket_name: Mapped[str | None] = mapped_column(String)
-    object_key: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -157,7 +155,7 @@ class Submission(Base):
         nullable=False,
         server_default=text("NOW()"),
     )
-    image_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    image_id: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
     pass_fail: Mapped[str] = mapped_column(String, nullable=False)
     anomaly_count: Mapped[int | None] = mapped_column(Integer)
