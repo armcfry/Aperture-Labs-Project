@@ -128,23 +128,33 @@ async def upload_design(
 # Downloads (Presigned URLs)
 # -------------------------
 
-def get_design_url(object_key: str, expires: int = 900) -> dict:
-    # object_key format: "{project_id}/designs/{filename}"
-    bucket, object_name = object_key.split("/", 1)
-    url = minio_client.get_presigned_url(
-        bucket=bucket,
-        object_name=object_name,
-        expires_seconds=expires,
-    )
-    return {"url": url, "expires_in": expires}
-
-
-def get_image_url(object_key: str, expires: int = 900) -> dict:
+def get_image_url(
+    object_key: str,
+    expires: int = 900,
+    download: bool = False,
+) -> dict:
     # object_key format: "{project_id}/images/{filename}"
     bucket, object_name = object_key.split("/", 1)
     url = minio_client.get_presigned_url(
         bucket=bucket,
         object_name=object_name,
         expires_seconds=expires,
+        download=download,
+    )
+    return {"url": url, "expires_in": expires}
+
+
+def get_design_url(
+    object_key: str,
+    expires: int = 900,
+    download: bool = False,
+) -> dict:
+    # object_key format: "{project_id}/designs/{filename}"
+    bucket, object_name = object_key.split("/", 1)
+    url = minio_client.get_presigned_url(
+        bucket=bucket,
+        object_name=object_name,
+        expires_seconds=expires,
+        download=download,
     )
     return {"url": url, "expires_in": expires}

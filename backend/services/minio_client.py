@@ -40,7 +40,7 @@ def upload_file(
         length=len(file_data),
         content_type=content_type,
     )
-    return object_name  # just the object name, not bucket/object_name
+    return object_name
 
 
 def list_objects(bucket: str, prefix: str) -> list[str]:
@@ -54,12 +54,22 @@ def get_presigned_url(
     bucket: str,
     object_name: str,
     expires_seconds: int = 900,
+    download: bool = False,
 ) -> str:
     client = get_client()
+
+    extra_params = None
+    if download:
+        filename = object_name.split("/")[-1]
+        extra_params = {
+            "response-content-disposition": f'attachment; filename="{filename}"'
+        }
+
     return client.presigned_get_object(
         bucket,
         object_name,
         expires=timedelta(seconds=expires_seconds),
+        extra_query_params=extra_params,
     )
 
 
