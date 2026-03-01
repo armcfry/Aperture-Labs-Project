@@ -29,6 +29,15 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run backend tests with coverage
+        env:
+          DATABASE_URL: "postgresql://test:test@localhost:5432/test_db"
+          SECRET_KEY: "test-secret-key-for-ci-only"
+          MINIO_ENDPOINT: "localhost:9000"
+          MINIO_ACCESS_KEY: "test-access-key"
+          MINIO_SECRET_KEY: "test-secret-key"
+          MINIO_BUCKET_DESIGNS: "test-designs"
+          MINIO_BUCKET_IMAGES: "test-images"
+          DETECTION_WEBHOOK_SECRET: "test-webhook-secret"
         run: |
           cd backend
           pytest --cov=. --cov-report=xml:coverage.xml --cov-report=term-missing
