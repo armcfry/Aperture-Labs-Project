@@ -19,24 +19,23 @@ dev-reset:
 # Testing
 # -------------------------
 
-test-up:
-	docker compose -f docker-compose-test.yml up -d
-	@echo "Waiting for test database to be ready..."
-	@sleep 3
+# test-up:
+# 	docker compose -f docker-compose-test.yml up -d
+# 	@echo "Waiting for test database to be ready..."
+# 	@sleep 3
 
-test-down:
-	docker compose -f docker-compose-test.yml down
+# test-down:
+# 	docker compose -f docker-compose-test.yml down
 
-test: test-up
+test:
 	cd backend && pytest
-	$(MAKE) test-down
 
 test-unit:
 	cd backend && pytest -m unit
 
-test-api: test-up
-	cd backend && pytest -m api
-	$(MAKE) test-down
+# test-api: test-up
+# 	cd backend && pytest -m api
+# 	$(MAKE) test-down
 
 # test-e2e: dev test-up
 # 	cd backend && pytest -m e2e
