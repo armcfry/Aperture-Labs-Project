@@ -1,41 +1,31 @@
-"""
-Detection Router for APIs 
-"""
+from fastapi import APIRouter, Depends, Header, status
+from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query
-from PIL import Image
-import io
-from typing import Optional
-
-from models.ollama_vlm import get_model
+from db.session import get_db
 from schemas.detection import DetectionResponse
+from services import detection_service
 
 
-router = APIRouter(prefix="/api", tags=["detection"])
+router = APIRouter(
+    prefix="/webhooks/detection",
+    tags=["Detection"],
+)
 
 
-@router.post("/detect", response_model=DetectionResponse)
-async def detect_fod(
-    file: UploadFile = File(...),
-    model_name: Optional[str] = Query(default="qwen2.5vl:7b", description="Ollama model to use")
+# -------------------------
+# Receive Detection Result
+# -------------------------
+@router.post(
+    "",
+    status_code=status.HTTP_200_OK,
+)
+def receive_detection_result(
+    payload: DetectionResponse,
+    db: Session = Depends(get_db),
+    x_webhook_secret: str | None = Header(default=None),
 ):
-    if not file:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-
-    if not (file.content_type or "").startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
-
-    try:
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-    except Exception as error:
-        raise HTTPException(status_code=400, detail=f"Could not process image: {str(error)}")
-
-    model = get_model(model_name)
-
-    try:
-        return model.detect_fod(image)
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Detection failed: {str(error)}")
+    detection_service.handle_detection_result(
+        db=db,
+        payload=payload,
+        webhook_secret=x_webhook_secret,
+    )
