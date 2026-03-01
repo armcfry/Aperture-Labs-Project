@@ -30,7 +30,7 @@ class TestAuthSchemas:
     def test_login_request_invalid_email(self):
         """Test LoginRequest raises error with invalid email."""
         with pytest.raises(Exception):
-            LoginRequest(email="invalid-email", password="fake-test-pw-123")  # noqa: S105
+            LoginRequest(email="invalid-email", password="fake-test-pw-123")  # noqa: S105  # NOSONAR
 
     def test_login_request_missing_fields(self):
         """Test LoginRequest raises error with missing fields."""
