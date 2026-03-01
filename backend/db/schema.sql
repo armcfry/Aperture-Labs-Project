@@ -5,8 +5,8 @@ CREATE TABLE users (
     id UUID PRIMARY KEY,
     email VARCHAR UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- projects (depends on users via created_by_user_id)
@@ -14,11 +14,9 @@ CREATE TABLE projects (
     id UUID PRIMARY KEY,
     name VARCHAR NOT NULL,
     description TEXT,
-    bucket_name VARCHAR,
-    object_key UUID, -- design spec key
     created_by_user_id UUID NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     archived_at TIMESTAMPTZ,
     detector_version VARCHAR,
 
@@ -56,8 +54,8 @@ CREATE TABLE submissions (
     id UUID PRIMARY KEY,
     project_id UUID NOT NULL,
     submitted_by_user_id UUID NOT NULL,
-    submitted_at TIMESTAMPTZ NOT NULL,
-    image_id UUID NOT NULL,
+    submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    image_id VARCHAR NOT NULL,
     status VARCHAR NOT NULL,
     pass_fail VARCHAR NOT NULL,
     anomaly_count INT,
@@ -91,7 +89,7 @@ CREATE TABLE anomalies (
     description TEXT,
     severity VARCHAR,
     confidence DOUBLE PRECISION,
-    created_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT fk_anomalies_submission
         FOREIGN KEY (submission_id)

@@ -31,15 +31,13 @@ INSERT INTO users (
 
 -- projects
 INSERT INTO projects (
-    id, name, description, bucket_name, object_key, created_by_user_id,
+    id, name, description, created_by_user_id,
     created_at, updated_at, archived_at, detector_version
 ) VALUES
 (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
     'Valve Housing Inspection',
     'Project for detecting surface defects on valve housing images.',
-    'proj-valve-housing-inspection',
-    'aaaaaaaa-0000-0000-0000-000000000001',
     '11111111-1111-1111-1111-111111111111',
     NOW(),
     NOW(),
@@ -50,8 +48,6 @@ INSERT INTO projects (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
     'PCB Solder Check',
     'Detect solder bridge and missing solder anomalies on PCB images.',
-    'proj-pcb-solder-check',
-    'aaaaaaaa-0000-0000-0000-000000000002',
     '22222222-2222-2222-2222-222222222222',
     NOW(),
     NOW(),
