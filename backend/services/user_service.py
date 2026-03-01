@@ -2,13 +2,11 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 
 from db.models import User
 from schemas.users import UserCreate, UserUpdate
+from core.security import hash_password
 from core import exceptions
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def create_user(db: Session, payload: UserCreate) -> User:
@@ -19,7 +17,7 @@ def create_user(db: Session, payload: UserCreate) -> User:
     user = User(
         id=uuid.uuid4(),
         email=payload.email,
-        password_hash=pwd_context.hash(payload.password),
+        password_hash=hash_password(payload.password),
     )
     db.add(user)
     db.commit()
@@ -32,6 +30,10 @@ def get_user(db: Session, user_id: uuid.UUID) -> User:
     if not user:
         raise exceptions.UserNotFound()
     return user
+
+
+def list_users(db: Session) -> list[User]:
+    return db.query(User).order_by(User.created_at.desc()).all()
 
 
 def update_user(db: Session, user_id: uuid.UUID, payload: UserUpdate) -> User:
@@ -47,7 +49,7 @@ def update_user(db: Session, user_id: uuid.UUID, payload: UserUpdate) -> User:
         user.email = payload.email
 
     if payload.password is not None:
-        user.password_hash = pwd_context.hash(payload.password)
+        user.password_hash = hash_password(payload.password)
 
     user.updated_at = datetime.utcnow()
     db.commit()

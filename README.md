@@ -57,85 +57,79 @@ See [frontend/README.md](frontend/README.md) for more details.
 
 ## API
 
-Can use Swagger UI: http://localhost:8000/docs or commands below
+Can use Swagger UI: http://localhost:8000/docs
 
-### `POST /api/login`
+## Spin Up Databases and Run API Server
 
-Authenticate a user with username and password.
+## Prerequisites
 
-**Test with curl (Windows):**
-```powershell
-curl.exe --% -X POST http://localhost:8000/api/login -H "Content-Type: application/json" -d "{\"username\":\"test\",\"password\":\"test\"}"
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- Python 3.12 or 3.13 (3.14 may cause dependency issues with some packages)
+- `pip` and `venv`
+
+---
+
+## 1. Environment Setup
+
+Copy the example environment file and fill in your values:
+
+```bash
+cp backend/.env.example backend/.env
 ```
 
-**Response:**
-```json
-{"success":true,"user":{"username":"test"},"message":"Login successful"}
+Your `backend/.env` should contain:
+
+```
+DATABASE_URL=postgresql://user:pass@localhost:5432/appdb
+SECRET_KEY=your-secret-key-here
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET_DESIGNS=fod-designs
+MINIO_BUCKET_IMAGES=fod-images
+MINIO_USE_SSL=false
+DETECTION_WEBHOOK_SECRET=your-webhook-secret-here
 ```
 
-### `POST /api/detect`
+---
 
-Upload an image to detect FOD. Returns location and description of any FOD found.
+## 2. Start Docker Services
 
-**Test with curl (Windows):**
-```powershell
-curl.exe -X POST "http://localhost:8000/api/detect" -F "file=@data/FOD_pictures/bolt_in_front_of_plane.png"
+From the project root, start Postgres and MinIO:
+
+```bash
+docker compose up -d
 ```
 
-**Response:**
-`{"response":"In the image, there is a visible Foreign Object Debris (FOD) item in the foreground. Here is the description:\n\n- **Item**: The item appears to be a cylindrical object with markings that read \"48 FW - GOLDEN BOLT.\" It looks like a spent cartridge or a similar type of ammunition casing.\n- **Location**: It is lying on the ground in the foreground, closer to the bottom left corner of the image.\n\nThis item is likely FOD and should be removed to ensure safety and operational readiness."}`
+To verify both containers are running:
 
-### `POST /api/projects/create`
-
-Create a new project. Required before uploading images.
-
-**Test with curl (Windows):**
-```powershell
-curl.exe --% -X POST http://localhost:8000/api/projects/create -H "Content-Type: application/json" -d "{\"name\":\"TestProject\"}"
+```bash
+docker ps
 ```
 
-**Response:**
-```json
-{"id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","name":"TestProject","created_at":"2026-02-21T12:00:00","design_specs":[]}
+You should see two containers — one for `postgres` and one for `minio`.
+
+To watch the initialization logs and confirm the schema and seed data loaded correctly:
+
+```bash
+docker logs aperture-labs-project-postgres-1 --follow
 ```
 
-### `GET /api/projects/list`
+You should see references to `schema.sql` and `seed.sql` being processed with no errors. Press `Ctrl+C` to stop following logs.
 
-List all projects.
+---
 
-**Test with curl (Windows):**
-```powershell
-curl.exe -X GET "http://localhost:8000/api/projects/list"
+## 3. Start the API
+
+From the `backend/` directory with your virtual environment active:
+
+```bash
+uvicorn main:app --reload
 ```
 
-### `POST /api/upload/image`
+The API will be available at:
 
-Upload an image to MinIO storage. Requires a valid project ID.
-
-**Step 1: Create a project (see above) and copy the `id` from the response.**
-
-**Step 2: Upload image using the project ID:**
-```powershell
-curl.exe -X POST "http://localhost:8000/api/upload/image?project_id=YOUR_PROJECT_ID" -F "file=@data/FOD_pictures/bolt_in_front_of_plane.png"
-```
-
-**Response:**
-```json
-{"filename":"bolt_in_front_of_plane.png","project_id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","object_key":"a1b2c3d4-e5f6-7890-abcd-ef1234567890/bolt_in_front_of_plane.png"}
-```
-
-## Using docker to spin up the database containers
-
-#### 1. Make sure you have docker desktop installed.
-#### 2. Install docker cli.
-#### 3. Spin up containers
-
-    docker compose up -d
-
-This will create two containers. One contains the postgres database, the other holds the minio storage. In the /backend/db/init.sql, two tables are created in the postgres db. One for `users` and the other for `fod_detection` (subject to change.) Database information will persist unless the volumes are deleted.
-
-#### 4. To stop running containers (not remove volume)
-    docker compose stop
-
-#### 5. To remove the containers and remove the volumes:
-    docker compose down -v
+- **API:** `http://127.0.0.1:8000`
+- **Swagger docs:** `http://127.0.0.1:8000/docs`
+- **MinIO console:** `http://localhost:9001` (login: `minioadmin` / `minioadmin`)

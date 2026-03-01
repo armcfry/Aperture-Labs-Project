@@ -6,6 +6,9 @@ from pydantic import BaseModel, ConfigDict
 class ProjectBase(BaseModel):
     name: str
     description: str | None = None
+    bucket_name: str | None = None
+    object_key: uuid.UUID | None = None
+    detector_version: str | None = None
 
 
 class ProjectCreate(ProjectBase):
@@ -15,6 +18,9 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    bucket_name: str | None = None
+    object_key: uuid.UUID | None = None
+    detector_version: str | None = None
     archived_at: datetime | None = None
 
 

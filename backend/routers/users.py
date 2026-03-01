@@ -38,6 +38,16 @@ def create_user(
 
 
 # -------------------------
+# List Users
+# -------------------------
+@router.get("", response_model=List[UserRead])
+def list_users(
+    db: Session = Depends(get_db),
+):
+    return user_service.list_users(db=db)
+
+
+# -------------------------
 # Get Single User
 # -------------------------
 @router.get("/{user_id}", response_model=UserRead)
