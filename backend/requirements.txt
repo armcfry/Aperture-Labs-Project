@@ -32,6 +32,10 @@ uvloop==0.22.1
 watchfiles==1.1.1
 websockets==16.0
 
+# OWLv2 Object Detection
+torch>=2.0.0
+transformers>=4.36.0
+
 # Testing
 pytest>=8.0.0
 pytest-cov>=4.1.0
