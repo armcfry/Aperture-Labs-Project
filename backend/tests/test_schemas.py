@@ -22,14 +22,15 @@ class TestAuthSchemas:
 
     def test_login_request_valid(self):
         """Test LoginRequest with valid data."""
-        request = LoginRequest(email="test@example.com", password="testpass")
+        test_pw = "fake-test-pw-123"  # noqa: S105
+        request = LoginRequest(email="test@example.com", password=test_pw)
         assert request.email == "test@example.com"
-        assert request.password == "testpass"
+        assert request.password == test_pw
 
     def test_login_request_invalid_email(self):
         """Test LoginRequest raises error with invalid email."""
         with pytest.raises(Exception):
-            LoginRequest(email="invalid-email", password="testpass")
+            LoginRequest(email="invalid-email", password="fake-test-pw-123")  # noqa: S105
 
     def test_login_request_missing_fields(self):
         """Test LoginRequest raises error with missing fields."""
@@ -130,9 +131,10 @@ class TestUserSchemas:
 
     def test_user_create(self):
         """Test UserCreate schema."""
-        user = UserCreate(email="test@example.com", password="secret123")
+        test_pw = "fake-test-pw-456"  # noqa: S105
+        user = UserCreate(email="test@example.com", password=test_pw)
         assert user.email == "test@example.com"
-        assert user.password == "secret123"
+        assert user.password == test_pw
 
     def test_user_update(self):
         """Test UserUpdate schema with partial update."""
@@ -204,4 +206,4 @@ class TestDetectionSchemas:
         )
         assert response.response == "No defects found"
         assert response.model == "qwen2.5vl:7b"
-        assert response.inference_time_ms == 1234.56
+        assert response.inference_time_ms == pytest.approx(1234.56)

@@ -23,15 +23,16 @@ class TestAuthService:
         """Test successful login returns user info."""
         from services import auth_service
 
+        test_pw = "fake-test-pw-123"  # noqa: S105
         mock_user = MagicMock()
         mock_user.id = uuid.uuid4()
         mock_user.email = "test@example.com"
-        mock_user.password_hash = "testpass"
+        mock_user.password_hash = test_pw
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_user
 
-        payload = LoginRequest(email="test@example.com", password="testpass")
+        payload = LoginRequest(email="test@example.com", password=test_pw)
         result = auth_service.login(mock_db, payload)
 
         assert result.success is True
@@ -44,7 +45,7 @@ class TestAuthService:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
-        payload = LoginRequest(email="notfound@example.com", password="testpass")
+        payload = LoginRequest(email="notfound@example.com", password="fake-test-pw-123")  # noqa: S105
         result = auth_service.login(mock_db, payload)
 
         assert result.success is False
@@ -57,12 +58,12 @@ class TestAuthService:
         mock_user = MagicMock()
         mock_user.id = uuid.uuid4()
         mock_user.email = "test@example.com"
-        mock_user.password_hash = "correctpass"
+        mock_user.password_hash = "correct-fake-pw"  # noqa: S105
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_user
 
-        payload = LoginRequest(email="test@example.com", password="wrongpass")
+        payload = LoginRequest(email="test@example.com", password="wrong-fake-pw")  # noqa: S105
         result = auth_service.login(mock_db, payload)
 
         assert result.success is False
@@ -84,12 +85,12 @@ class TestUserService:
         """Test creating a new user."""
         from services import user_service
 
-        mock_hash.return_value = "hashed_password"
+        mock_hash.return_value = "hashed_fake_pw"  # noqa: S105
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
-        payload = UserCreate(email="new@example.com", password="password123")
+        payload = UserCreate(email="new@example.com", password="fake-test-pw-789")  # noqa: S105
         result = user_service.create_user(mock_db, payload)
 
         mock_db.add.assert_called_once()
@@ -104,7 +105,7 @@ class TestUserService:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_existing
 
-        payload = UserCreate(email="existing@example.com", password="password123")
+        payload = UserCreate(email="existing@example.com", password="fake-test-pw-789")  # noqa: S105
 
         with pytest.raises(exceptions.ConflictError):
             user_service.create_user(mock_db, payload)
