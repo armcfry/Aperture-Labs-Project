@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from core import exceptions
-from schemas.users import UserCreate, UserUpdate
+from schemas.users import UserCreate
 from services import user_service
 
 pytestmark = pytest.mark.unit
@@ -12,11 +12,8 @@ pytestmark = pytest.mark.unit
 
 class TestUserService:
 
-    @patch("services.user_service.hash_password")
-    def test_create_user_success(self, mock_hash):
+    def test_create_user_success(self):
         """Test creating a new user."""
-        mock_hash.return_value = "hashed_fake_pw"  # noqa: S105
-
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
