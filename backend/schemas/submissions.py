@@ -1,34 +1,32 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
+from .enums import SubmissionStatus, SubmissionPassFail
 
 
-class ProjectBase(BaseModel):
-    name: str
-    description: str | None = None
-    bucket_name: str | None = None
-    object_key: uuid.UUID | None = None
-    detector_version: str | None = None
+class SubmissionBase(BaseModel):
+    project_id: uuid.UUID
+    image_id: uuid.UUID
 
 
-class ProjectCreate(ProjectBase):
-    created_by_user_id: uuid.UUID | None = None
+class SubmissionCreate(SubmissionBase):
+    submitted_by_user_id: uuid.UUID
 
 
-class ProjectUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    bucket_name: str | None = None
-    object_key: uuid.UUID | None = None
-    detector_version: str | None = None
-    archived_at: datetime | None = None
+class SubmissionUpdate(BaseModel):
+    status: SubmissionStatus | None = None
+    pass_fail: SubmissionPassFail | None = None
+    anomaly_count: int | None = None
+    error_message: str | None = None
 
 
-class ProjectRead(ProjectBase):
+class SubmissionRead(SubmissionBase):
     id: uuid.UUID
-    created_by_user_id: uuid.UUID | None
-    created_at: datetime
-    updated_at: datetime
-    archived_at: datetime | None
+    submitted_by_user_id: uuid.UUID
+    submitted_at: datetime
+    status: SubmissionStatus
+    pass_fail: SubmissionPassFail
+    anomaly_count: int | None
+    error_message: str | None
 
     model_config = ConfigDict(from_attributes=True)

@@ -4,7 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from db.session import get_db   #TODO: implement this
+from db.session import get_db
 from schemas.projects import (
     ProjectCreate,
     ProjectUpdate,
@@ -154,27 +154,27 @@ def archive_project(
         )
 
 
-# -------------------------
-# Unarchive Project
-# -------------------------
-@router.post("/{project_id}/unarchive", response_model=ProjectRead)
-def unarchive_project(
-    project_id: UUID,
-    db: Session = Depends(get_db),
+# # -------------------------
+# # Unarchive Project
+# # -------------------------
+# @router.post("/{project_id}/unarchive", response_model=ProjectRead)
+# def unarchive_project(
+#     project_id: UUID,
+#     db: Session = Depends(get_db),
     
-):
-    try:
-        return project_service.unarchive_project(
-            db=db,
-            project_id=project_id,
-        )
-    except exceptions.ProjectNotFound:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-    except exceptions.PermissionDenied:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the owner can unarchive this project",
-        )
+# ):
+#     try:
+#         return project_service.unarchive_project(
+#             db=db,
+#             project_id=project_id,
+#         )
+#     except exceptions.ProjectNotFound:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Project not found",
+#         )
+#     except exceptions.PermissionDenied:
+#         raise HTTPException(
+#             status_code=status.HTTP_403_FORBIDDEN,
+#             detail="Only the owner can unarchive this project",
+#         )

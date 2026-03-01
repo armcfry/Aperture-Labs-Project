@@ -1,96 +1,51 @@
-from datetime import datetime
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from uuid import UUID
 
-from schemas.projects import DesignSpec, UploadResponse
-from services import minio_client
-from routers.projects import get_project, add_design_spec
+from fastapi import APIRouter, Depends, UploadFile, File, Query, status
+from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/api/upload", tags=["uploads"])
+from db.session import get_db
+from schemas.projects import UploadResponse
+from services import upload_service
+
+
+router = APIRouter(
+    prefix="/uploads",
+    tags=["Uploads"],
+)
 
 ALLOWED_DESIGN_TYPES = ["application/pdf", "text/plain"]
 ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg"]
 
 
-@router.post("/design", response_model=UploadResponse)
+# -------------------------
+# Upload Design File
+# -------------------------
+@router.post("/design", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_design(
+    project_id: UUID = Query(..., description="Project to associate the design with"),
     file: UploadFile = File(...),
-    project_id: str = Query(..., description="Project ID to associate the design with"),
-) -> UploadResponse:
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided")
-
-    content_type = file.content_type or ""
-    if content_type not in ALLOWED_DESIGN_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: PDF, TXT. Current type: {content_type}",
-        )
-
-    contents = await file.read()
-    object_name = f"{project_id}/{file.filename}"
-
-    try:
-        object_key = minio_client.upload_file(
-            minio_client.BUCKET_DESIGNS,
-            object_name,
-            contents,
-            content_type,
-        )
-
-        spec = DesignSpec(
-            filename=file.filename,
-            object_key=object_key,
-            uploaded_at=datetime.now(),
-        )
-        add_design_spec(project_id, spec)
-
-        return UploadResponse(
-            filename=file.filename,
-            project_id=project_id,
-            object_key=object_key,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    db: Session = Depends(get_db),
+):
+    return await upload_service.upload_design(
+        db=db,
+        project_id=project_id,
+        file=file,
+        allowed_types=ALLOWED_DESIGN_TYPES,
+    )
 
 
-@router.post("/image", response_model=UploadResponse)
+# -------------------------
+# Upload Image File
+# -------------------------
+@router.post("/image", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_image(
+    project_id: UUID = Query(..., description="Project to associate the image with"),
     file: UploadFile = File(...),
-    project_id: str = Query(..., description="Project ID to associate the image with"),
-) -> UploadResponse:
-    project = get_project(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided")
-
-    content_type = file.content_type or ""
-    if content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: PNG, JPEG. Current type:{content_type}",
-        )
-
-    contents = await file.read()
-    object_name = f"{project_id}/{file.filename}"
-
-    try:
-        object_key = minio_client.upload_file(
-            minio_client.BUCKET_IMAGES,
-            object_name,
-            contents,
-            content_type,
-        )
-
-        return UploadResponse(
-            filename=file.filename,
-            project_id=project_id,
-            object_key=object_key,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    db: Session = Depends(get_db),
+):
+    return await upload_service.upload_image(
+        db=db,
+        project_id=project_id,
+        file=file,
+        allowed_types=ALLOWED_IMAGE_TYPES,
+    )

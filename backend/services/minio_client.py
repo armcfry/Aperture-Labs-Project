@@ -1,14 +1,7 @@
 import io
 from minio import Minio
-from minio.error import S3Error
 
-MINIO_ENDPOINT = "localhost:9000"
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin"
-MINIO_SECURE = False
-
-BUCKET_DESIGNS = "fod-designs"
-BUCKET_IMAGES = "fod-images"
+from core.config import settings
 
 _client: Minio | None = None
 
@@ -17,10 +10,10 @@ def get_client() -> Minio:
     global _client
     if _client is None:
         _client = Minio(
-            MINIO_ENDPOINT,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=MINIO_SECURE,
+            settings.MINIO_ENDPOINT,
+            access_key=settings.MINIO_ACCESS_KEY,
+            secret_key=settings.MINIO_SECRET_KEY,
+            secure=settings.MINIO_USE_SSL,
         )
     return _client
 
@@ -32,7 +25,10 @@ def ensure_bucket(bucket_name: str) -> None:
 
 
 def upload_file(
-    bucket: str, object_name: str, file_data: bytes, content_type: str
+    bucket: str,
+    object_name: str,
+    file_data: bytes,
+    content_type: str,
 ) -> str:
     client = get_client()
     ensure_bucket(bucket)

@@ -13,6 +13,10 @@ class ProjectMemberCreate(ProjectMemberBase):
     user_id: uuid.UUID
 
 
+class ProjectMemberUpdate(BaseModel):
+    role: ProjectRole
+
+
 class ProjectMemberRead(ProjectMemberBase):
     project_id: uuid.UUID
     user_id: uuid.UUID

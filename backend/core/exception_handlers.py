@@ -7,21 +7,49 @@ from core import exceptions
 def project_not_found_handler(request: Request, exc: exceptions.ProjectNotFound):
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
-        content={"detail": "Project not found"},
+        content={"detail": exc.detail},
+    )
+
+
+def anomaly_not_found_handler(request: Request, exc: exceptions.AnomalyNotFound):
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": exc.detail},
+    )
+
+
+def user_not_found_handler(request: Request, exc: exceptions.UserNotFound):
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": exc.detail},
+    )
+
+
+def member_not_found_handler(request: Request, exc: exceptions.MemberNotFound):
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": exc.detail},
+    )
+
+
+def submission_not_found_handler(request: Request, exc: exceptions.SubmissionNotFound):
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": exc.detail},
     )
 
 
 def permission_denied_handler(request: Request, exc: exceptions.PermissionDenied):
     return JSONResponse(
         status_code=status.HTTP_403_FORBIDDEN,
-        content={"detail": "You do not have permission to perform this action"},
+        content={"detail": exc.detail},
     )
 
 
 def conflict_error_handler(request: Request, exc: exceptions.ConflictError):
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
-        content={"detail": "Conflict error"},
+        content={"detail": exc.detail},
     )
 
 
@@ -31,5 +59,5 @@ def invalid_state_transition_handler(
 ):
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": "Invalid state transition"},
+        content={"detail": exc.detail},
     )
