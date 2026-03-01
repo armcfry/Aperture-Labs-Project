@@ -1,0 +1,76 @@
+FOD Detection Design Specification
+===================================
+Version: 1.0
+Date: 2026-03-01
+
+1. OVERVIEW
+-----------
+This specification defines the requirements for detecting Foreign Object Debris (FOD)
+on airport runways and aircraft maintenance areas using computer vision.
+
+2. TARGET OBJECTS
+-----------------
+The system shall detect the following categories of FOD:
+
+Category A - Hardware:
+  - Bolts, nuts, screws, washers
+  - Rivets and fasteners
+  - Metal fragments and shavings
+  - Wire and cable pieces
+
+Category B - Tools:
+  - Wrenches, screwdrivers, pliers
+  - Socket pieces
+  - Drill bits
+  - Safety wire pliers
+
+Category C - Materials:
+  - Plastic fragments
+  - Rubber pieces (gaskets, seals)
+  - Fabric/cloth items
+  - Paper and packaging materials
+
+Category D - Natural Debris:
+  - Rocks and gravel
+  - Wood pieces
+  - Animal remains
+  - Vegetation
+
+3. DETECTION REQUIREMENTS
+-------------------------
+- Minimum detectable object size: 5mm x 5mm
+- Detection confidence threshold: 0.3 (30%)
+- Supported image formats: PNG, JPEG
+- Maximum image resolution: 4096 x 4096 pixels
+
+4. SEVERITY CLASSIFICATION
+--------------------------
+HIGH: Metal objects, tools, sharp fragments
+      - Immediate removal required
+      - Can cause tire damage or engine ingestion
+
+MEDIUM: Plastic, rubber, soft materials
+        - Removal within 1 hour
+        - Potential equipment damage
+
+LOW: Paper, vegetation, small natural debris
+     - Removal during scheduled cleaning
+     - Minimal risk
+
+5. BOUNDING BOX REQUIREMENTS
+----------------------------
+- Color coding by severity:
+  - HIGH: Red (#FF0000)
+  - MEDIUM: Orange (#FFA500)
+  - LOW: Yellow (#FFFF00)
+- Minimum box padding: 5 pixels
+- Label format: "[Category] - [Confidence %]"
+
+6. ACCEPTANCE CRITERIA
+----------------------
+- True positive rate: >= 85%
+- False positive rate: <= 15%
+- Processing time: < 5 seconds per image
+- Support for batch processing: up to 10 images
+
+END OF SPECIFICATION
