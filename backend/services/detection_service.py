@@ -58,15 +58,3 @@ def trigger_detection(
     print(f"[detection] triggered for submission {submission_id}")
     print(f"[detection] image: {image_object_key}")
     print(f"[detection] designs: {design_object_keys}")
-
-
-def handle_detection_result(
-    db: Session,
-    payload: DetectionResponse,
-    webhook_secret: str | None,
-) -> None:
-    if webhook_secret != settings.DETECTION_WEBHOOK_SECRET:
-        raise exceptions.PermissionDenied("Invalid webhook secret")
-
-    # TODO: parse payload.response and update the relevant submission
-    pass
