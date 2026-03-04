@@ -1,4 +1,4 @@
-.PHONY: dev dev-down test test-unit test-api test-down clean
+.PHONY: dev dev-down dev-reset run test test-unit test-api test-down clean
 
 # -------------------------
 # Development
@@ -11,9 +11,13 @@ dev-down:
 	docker compose down
 
 dev-reset:
-	docker compose down
-	docker volume rm aperture-labs-project_postgres_data aperture-labs-project_minio_data || true
+	docker compose down -v
 	docker compose up -d
+
+# Run full app locally (Docker + backend + frontend). Requires: Docker, Python 3.12+, Node.js
+run:
+	@chmod +x run.sh
+	./run.sh
 
 # -------------------------
 # Testing
