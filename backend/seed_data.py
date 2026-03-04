@@ -1,9 +1,10 @@
 """
-Seed data initializer — runs once on first startup.
+Seed data initializer — runs on startup (MinIO only).
 
-Creates a MinIO bucket for the demo project, uploads a design-spec PDF
-and a sample FOD image, then runs VLM analysis against the image.
-Idempotent: skips entirely when the design file already exists in MinIO.
+Creates a MinIO bucket for the demo project and uploads a design-spec PDF
+and a sample FOD image. No automatic VLM analysis; inspections run when
+the user uploads an image and runs analysis from the UI.
+Idempotent: skips when the design file already exists in MinIO.
 """
 
 import io
@@ -18,6 +19,7 @@ from db.models import Project, Submission, Anomaly
 from db.session import SessionLocal
 from models.ollama_vlm import get_model
 from services import minio_client
+from utils.pdf_extract import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +210,18 @@ def _run_seed_analysis(db: Session) -> None:
             )
 
         model = get_model()
-        result = model.detect_fod(image)
+        spec_parts = []
+        for obj_name in minio_client.list_objects(bucket=str(SEED_PROJECT_ID), prefix="designs/"):
+            if obj_name.lower().endswith(".pdf"):
+                try:
+                    data = minio_client.get_file(bucket=str(SEED_PROJECT_ID), object_name=obj_name)
+                    t = extract_text_from_pdf(data)
+                    if t.strip():
+                        spec_parts.append(t.strip())
+                except Exception:
+                    pass
+        spec_text = "\n\n---\n\n".join(spec_parts) if spec_parts else None
+        result = model.detect_fod(image, spec_text=spec_text)
 
         submission.status = "complete"
         submission.pass_fail = result.pass_fail
@@ -234,6 +247,20 @@ def _run_seed_analysis(db: Session) -> None:
         logger.warning("[seed] Detection failed (Ollama may be offline): %s", exc)
         submission.status = "failed"
         submission.error_message = str(exc)[:500]
+        # Add one placeholder anomaly so the result UI shows an explanation instead of "no defect details"
+        placeholder = Anomaly(
+            id=uuid.uuid4(),
+            submission_id=submission.id,
+            label="detection_unavailable",
+            description=(
+                "Seed detection did not run (Ollama may be offline). "
+                "Start Ollama (ollama serve) and optionally reset the DB to see the seed FOD analysis."
+            ),
+            severity="med",
+            confidence=0.0,
+        )
+        db.add(placeholder)
+        submission.anomaly_count = 1
         db.commit()
 
 
@@ -249,6 +276,26 @@ def run_seed() -> None:
         logger.warning("[seed] MinIO seeding failed (is MinIO running?): %s", exc)
         return
 
+    db = SessionLocal()
+    try:
+        _run_seed_analysis(db)
+    except Exception as exc:
+        logger.warning("[seed] Analysis seeding failed: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
+
+
+def run_seed_minio_only() -> None:
+    """Run only MinIO uploads (fast). Use at startup so buckets/files exist immediately."""
+    try:
+        _seed_minio()
+    except Exception as exc:
+        logger.warning("[seed] MinIO seeding failed (is MinIO running?): %s", exc)
+
+
+def run_seed_analysis_background() -> None:
+    """Run only the DB + VLM analysis part in a background thread (owns its own DB session)."""
     db = SessionLocal()
     try:
         _run_seed_analysis(db)

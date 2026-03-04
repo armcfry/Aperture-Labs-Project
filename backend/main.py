@@ -4,6 +4,8 @@ GLaDOS - Aperture Labs FOD Detection API
 
 import logging
 from contextlib import asynccontextmanager
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,14 +31,24 @@ from core.exception_handlers import (
     conflict_error_handler,
     invalid_state_transition_handler,
 )
-from seed_data import run_seed
+from seed_data import run_seed_minio_only
 
 logging.basicConfig(level=logging.INFO)
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security-related headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        return response
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    run_seed()
+    run_seed_minio_only()
     yield
 
 
@@ -46,6 +58,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Security headers (before CORS so they apply to all responses)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Configure CORS middleware: allow any localhost/127.0.0.1 origin (any port) for dev
 app.add_middleware(
