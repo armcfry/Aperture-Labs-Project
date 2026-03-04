@@ -83,6 +83,7 @@ class Project(Base):
         onupdate=datetime.utcnow,
     )
     archived_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     detector_version: Mapped[str | None] = mapped_column(String)
 
     # Relationships

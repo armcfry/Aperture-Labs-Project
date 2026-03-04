@@ -3,13 +3,32 @@ import uuid
 from fastapi import UploadFile, HTTPException, status
 from sqlalchemy.orm import Session
 
-from db.models import Project, Submission
-from schemas.storage import ImageUploadResponse
+from db.models import Submission
+from schemas.storage import ImageUploadResponse, PresignedUrlResponse
 from schemas.projects import UploadResponse
 from schemas.enums import SubmissionStatus, SubmissionPassFail
 from services import minio_client
 from services import detection_service
+from services import project_service
 from core import exceptions
+
+
+def _validate_upload_file(
+    file: UploadFile,
+    allowed_types: list[str],
+    allowed_description: str,
+) -> None:
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No filename provided",
+        )
+    content_type = file.content_type or ""
+    if content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed: {allowed_description}. Got: {content_type}",
+        )
 
 
 # -------------------------
@@ -23,22 +42,9 @@ async def upload_image(
     file: UploadFile,
     allowed_types: list[str],
 ) -> ImageUploadResponse:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise exceptions.ProjectNotFound()
-
-    if not file.filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No filename provided",
-        )
-
+    project_service.get_project(db, project_id)
+    _validate_upload_file(file, allowed_types, "PNG, JPEG")
     content_type = file.content_type or ""
-    if content_type not in allowed_types:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed: PNG, JPEG. Got: {content_type}",
-        )
 
     # Upload image to MinIO
     contents = await file.read()
@@ -89,22 +95,9 @@ async def upload_design(
     file: UploadFile,
     allowed_types: list[str],
 ) -> UploadResponse:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise exceptions.ProjectNotFound()
-
-    if not file.filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No filename provided",
-        )
-
+    project_service.get_project(db, project_id)
+    _validate_upload_file(file, allowed_types, "PDF, TXT")
     content_type = file.content_type or ""
-    if content_type not in allowed_types:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed: PDF, TXT. Got: {content_type}",
-        )
 
     contents = await file.read()
     bucket = str(project_id)
@@ -128,12 +121,12 @@ async def upload_design(
 # Downloads (Presigned URLs)
 # -------------------------
 
-def get_image_url(
+def get_presigned_url(
     object_key: str,
     expires: int = 900,
     download: bool = False,
-) -> dict:
-    # object_key format: "{project_id}/images/{filename}"
+) -> PresignedUrlResponse:
+    # object_key format: "{project_id}/{prefix}/{filename}" (e.g. images/ or designs/)
     bucket, object_name = object_key.split("/", 1)
     url = minio_client.get_presigned_url(
         bucket=bucket,
@@ -141,20 +134,35 @@ def get_image_url(
         expires_seconds=expires,
         download=download,
     )
-    return {"url": url, "expires_in": expires}
+    return PresignedUrlResponse(url=url, expires_in=expires)
+
+
+def get_image_url(
+    object_key: str,
+    expires: int = 900,
+    download: bool = False,
+) -> PresignedUrlResponse:
+    return get_presigned_url(object_key=object_key, expires=expires, download=download)
 
 
 def get_design_url(
     object_key: str,
     expires: int = 900,
     download: bool = False,
-) -> dict:
-    # object_key format: "{project_id}/designs/{filename}"
-    bucket, object_name = object_key.split("/", 1)
-    url = minio_client.get_presigned_url(
-        bucket=bucket,
-        object_name=object_name,
-        expires_seconds=expires,
-        download=download,
-    )
-    return {"url": url, "expires_in": expires}
+) -> PresignedUrlResponse:
+    return get_presigned_url(object_key=object_key, expires=expires, download=download)
+
+
+def list_design_filenames(project_id: uuid.UUID) -> list[str]:
+    """List design spec filenames for a project (from MinIO designs/ prefix)."""
+    try:
+        bucket = str(project_id)
+        object_names = minio_client.list_objects(bucket=bucket, prefix="designs/")
+        # object_names are like "designs/filename.pdf" - extract filename only
+        prefix = "designs/"
+        return [
+            name[len(prefix):] for name in object_names
+            if name.startswith(prefix) and len(name) > len(prefix)
+        ]
+    except Exception:
+        return []

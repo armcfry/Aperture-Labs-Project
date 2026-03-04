@@ -2,8 +2,9 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from db.models import ProjectMember, Project, User
+from db.models import ProjectMember, User
 from schemas.project_members import ProjectMemberCreate, ProjectMemberUpdate
+from services import project_service
 from core import exceptions
 
 
@@ -12,9 +13,7 @@ def add_member(
     project_id: uuid.UUID,
     payload: ProjectMemberCreate,
 ) -> ProjectMember:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise exceptions.ProjectNotFound()
+    project_service.get_project(db, project_id)
 
     user = db.query(User).filter(User.id == payload.user_id).first()
     if not user:
@@ -39,9 +38,7 @@ def add_member(
 
 
 def list_members(db: Session, project_id: uuid.UUID) -> list[ProjectMember]:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise exceptions.ProjectNotFound()
+    project_service.get_project(db, project_id)
 
     return (
         db.query(ProjectMember)

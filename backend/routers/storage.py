@@ -79,6 +79,17 @@ def get_image_url(
 
 
 # -------------------------
+# List Design Files for Project
+# -------------------------
+@router.get("/designs", response_model=list[str])
+def list_designs(
+    project_id: UUID = Query(..., description="Project to list design specs for"),
+):
+    """Return list of design spec filenames for a project."""
+    return storage_service.list_design_filenames(project_id)
+
+
+# -------------------------
 # Get Design Presigned URL
 # -------------------------
 @router.get("/design/{object_key:path}")

@@ -1,7 +1,7 @@
 """Tests for project_member_service."""
 import uuid
 import pytest
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, patch
 
 from core import exceptions
 from schemas.project_members import ProjectMemberCreate, ProjectMemberUpdate
@@ -12,7 +12,8 @@ pytestmark = pytest.mark.unit
 
 class TestProjectMemberService:
 
-    def test_add_member_success(self):
+    @patch("services.project_member_service.project_service.get_project")
+    def test_add_member_success(self, mock_get_project):
         """Test successfully adding a member to a project."""
         project_id = uuid.uuid4()
         user_id = uuid.uuid4()
@@ -20,8 +21,8 @@ class TestProjectMemberService:
         mock_project = MagicMock()
         mock_user = MagicMock()
         mock_db = MagicMock()
+        mock_get_project.return_value = mock_project
         mock_db.query.return_value.filter.return_value.first.side_effect = [
-            mock_project,  # project exists
             mock_user,     # user exists
             None,          # not already a member
         ]
@@ -33,13 +34,15 @@ class TestProjectMemberService:
         )
         project_member_service.add_member(mock_db, project_id, payload)
 
+        mock_get_project.assert_called_once_with(mock_db, project_id)
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()
 
-    def test_add_member_project_not_found(self):
+    @patch("services.project_member_service.project_service.get_project")
+    def test_add_member_project_not_found(self, mock_get_project):
         """Test adding member fails when project does not exist."""
+        mock_get_project.side_effect = exceptions.ProjectNotFound()
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = None
 
         payload = ProjectMemberCreate(
             project_id=uuid.uuid4(),
@@ -50,14 +53,13 @@ class TestProjectMemberService:
         with pytest.raises(exceptions.ProjectNotFound):
             project_member_service.add_member(mock_db, uuid.uuid4(), payload)
 
-    def test_add_member_user_not_found(self):
+    @patch("services.project_member_service.project_service.get_project")
+    def test_add_member_user_not_found(self, mock_get_project):
         """Test adding member fails when user does not exist."""
         mock_project = MagicMock()
+        mock_get_project.return_value = mock_project
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.side_effect = [
-            mock_project,  # project exists
-            None,          # user not found
-        ]
+        mock_db.query.return_value.filter.return_value.first.return_value = None
 
         payload = ProjectMemberCreate(
             project_id=uuid.uuid4(),
@@ -68,14 +70,15 @@ class TestProjectMemberService:
         with pytest.raises(exceptions.UserNotFound):
             project_member_service.add_member(mock_db, uuid.uuid4(), payload)
 
-    def test_add_member_already_member(self):
+    @patch("services.project_member_service.project_service.get_project")
+    def test_add_member_already_member(self, mock_get_project):
         """Test adding member fails when user is already a member."""
         mock_project = MagicMock()
         mock_user = MagicMock()
         mock_existing = MagicMock()
+        mock_get_project.return_value = mock_project
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.side_effect = [
-            mock_project,   # project exists
             mock_user,      # user exists
             mock_existing,  # already a member
         ]
@@ -89,21 +92,23 @@ class TestProjectMemberService:
         with pytest.raises(exceptions.AlreadyMember):
             project_member_service.add_member(mock_db, uuid.uuid4(), payload)
 
-    def test_list_members_success(self):
+    @patch("services.project_member_service.project_service.get_project")
+    def test_list_members_success(self, mock_get_project):
         """Test listing members for a project."""
         mock_project = MagicMock()
+        mock_get_project.return_value = mock_project
         mock_members = [MagicMock(), MagicMock()]
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
         mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = mock_members
 
         result = project_member_service.list_members(mock_db, uuid.uuid4())
         assert len(result) == 2
 
-    def test_list_members_project_not_found(self):
+    @patch("services.project_member_service.project_service.get_project")
+    def test_list_members_project_not_found(self, mock_get_project):
         """Test listing members fails when project does not exist."""
+        mock_get_project.side_effect = exceptions.ProjectNotFound()
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = None
 
         with pytest.raises(exceptions.ProjectNotFound):
             project_member_service.list_members(mock_db, uuid.uuid4())

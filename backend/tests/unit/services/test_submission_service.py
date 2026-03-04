@@ -1,7 +1,7 @@
 """Tests for submission_service."""
 import uuid
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from core import exceptions
 from schemas.submissions import SubmissionCreate, SubmissionUpdate
@@ -18,15 +18,14 @@ class TestSubmissionService:
         project_id = uuid.uuid4()
         mock_project = MagicMock()
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        with patch("services.submission_service.project_service.get_project", return_value=mock_project):
+            payload = SubmissionCreate(
+                project_id=project_id,
+                image_id=f"{project_id}/images/test.png",
+                submitted_by_user_id=uuid.uuid4(),
+            )
 
-        payload = SubmissionCreate(
-            project_id=project_id,
-            image_id=f"{project_id}/images/test.png",
-            submitted_by_user_id=uuid.uuid4(),
-        )
-
-        submission_service.create_submission(mock_db, project_id, payload)
+            submission_service.create_submission(mock_db, project_id, payload)
 
         added = mock_db.add.call_args[0][0]
         assert added.status == SubmissionStatus.queued
@@ -36,16 +35,15 @@ class TestSubmissionService:
     def test_create_submission_project_not_found(self):
         """Test creating submission fails when project does not exist."""
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+        with patch("services.submission_service.project_service.get_project", side_effect=exceptions.ProjectNotFound()):
+            payload = SubmissionCreate(
+                project_id=uuid.uuid4(),
+                image_id="some/image.png",
+                submitted_by_user_id=uuid.uuid4(),
+            )
 
-        payload = SubmissionCreate(
-            project_id=uuid.uuid4(),
-            image_id="some/image.png",
-            submitted_by_user_id=uuid.uuid4(),
-        )
-
-        with pytest.raises(exceptions.ProjectNotFound):
-            submission_service.create_submission(mock_db, uuid.uuid4(), payload)
+            with pytest.raises(exceptions.ProjectNotFound):
+                submission_service.create_submission(mock_db, uuid.uuid4(), payload)
 
     def test_get_submission_found(self):
         """Test getting an existing submission."""
@@ -71,19 +69,18 @@ class TestSubmissionService:
         mock_project = MagicMock()
         mock_submissions = [MagicMock(), MagicMock(), MagicMock()]
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = mock_submissions
+        with patch("services.submission_service.project_service.get_project", return_value=mock_project):
+            mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = mock_submissions
 
-        result = submission_service.list_submissions_for_project(mock_db, uuid.uuid4())
+            result = submission_service.list_submissions_for_project(mock_db, uuid.uuid4())
         assert len(result) == 3
 
     def test_list_submissions_project_not_found(self):
         """Test listing submissions fails when project does not exist."""
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-
-        with pytest.raises(exceptions.ProjectNotFound):
-            submission_service.list_submissions_for_project(mock_db, uuid.uuid4())
+        with patch("services.submission_service.project_service.get_project", side_effect=exceptions.ProjectNotFound()):
+            with pytest.raises(exceptions.ProjectNotFound):
+                submission_service.list_submissions_for_project(mock_db, uuid.uuid4())
 
     def test_update_submission(self):
         """Test updating submission fields."""

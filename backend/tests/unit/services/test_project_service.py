@@ -33,7 +33,9 @@ class TestProjectService:
         mock_project.id = project_id
 
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        # get_project does query().filter(id).filter(deleted_at).first()
+        chain = mock_db.query.return_value.filter.return_value
+        chain.filter.return_value.first.return_value = mock_project
 
         result = project_service.get_project(mock_db, project_id)
         assert result.id == project_id
@@ -41,7 +43,8 @@ class TestProjectService:
     def test_get_project_not_found(self):
         """Test getting non-existent project raises ProjectNotFound."""
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+        chain = mock_db.query.return_value.filter.return_value
+        chain.filter.return_value.first.return_value = None
 
         with pytest.raises(exceptions.ProjectNotFound):
             project_service.get_project(mock_db, uuid.uuid4())
@@ -52,18 +55,19 @@ class TestProjectService:
         mock_db = MagicMock()
         mock_query = MagicMock()
         mock_db.query.return_value = mock_query
-        mock_query.filter.return_value.order_by.return_value.all.return_value = mock_projects
+        mock_query.filter.return_value.filter.return_value.order_by.return_value.all.return_value = mock_projects
 
         result = project_service.list_projects_for_user(mock_db, include_archived=False)
 
-        mock_query.filter.assert_called_once()
         assert len(result) == 1
 
     def test_list_projects_includes_archived(self):
         """Test listing projects includes archived when requested."""
         mock_projects = [MagicMock(), MagicMock()]
         mock_db = MagicMock()
-        mock_db.query.return_value.order_by.return_value.all.return_value = mock_projects
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_query.filter.return_value.order_by.return_value.all.return_value = mock_projects
 
         result = project_service.list_projects_for_user(mock_db, include_archived=True)
         assert len(result) == 2
@@ -73,7 +77,8 @@ class TestProjectService:
         mock_project = MagicMock()
         mock_project.archived_at = None
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        chain = mock_db.query.return_value.filter.return_value
+        chain.filter.return_value.first.return_value = mock_project
 
         payload = ProjectUpdate(name="Updated Name")
         project_service.update_project(mock_db, uuid.uuid4(), payload)
@@ -82,14 +87,19 @@ class TestProjectService:
         mock_db.commit.assert_called_once()
 
     def test_delete_project(self):
-        """Test deleting a project."""
+        """Test deleting a project (soft delete: sets deleted_at and commits)."""
+        project_id = uuid.uuid4()
         mock_project = MagicMock()
+        mock_project.deleted_at = None
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        mock_get_project = MagicMock(return_value=mock_project)
 
-        project_service.delete_project(mock_db, uuid.uuid4())
+        with patch("services.project_service.get_project", mock_get_project):
+            project_service.delete_project(mock_db, project_id)
 
-        mock_db.delete.assert_called_once_with(mock_project)
+        mock_get_project.assert_called_once_with(mock_db, project_id)
+        assert mock_project.deleted_at is not None
+        assert mock_project.updated_at is not None
         mock_db.commit.assert_called_once()
 
     def test_archive_project(self):
@@ -97,7 +107,8 @@ class TestProjectService:
         mock_project = MagicMock()
         mock_project.archived_at = None
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        chain = mock_db.query.return_value.filter.return_value
+        chain.filter.return_value.first.return_value = mock_project
 
         project_service.archive_project(mock_db, uuid.uuid4())
 
@@ -109,7 +120,8 @@ class TestProjectService:
         mock_project = MagicMock()
         mock_project.archived_at = datetime.utcnow()
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        chain = mock_db.query.return_value.filter.return_value
+        chain.filter.return_value.first.return_value = mock_project
 
         with pytest.raises(exceptions.InvalidStateTransition):
             project_service.archive_project(mock_db, uuid.uuid4())
@@ -119,7 +131,8 @@ class TestProjectService:
         mock_project = MagicMock()
         mock_project.archived_at = datetime.utcnow()
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        chain = mock_db.query.return_value.filter.return_value
+        chain.filter.return_value.first.return_value = mock_project
 
         project_service.unarchive_project(mock_db, uuid.uuid4())
 
@@ -131,7 +144,8 @@ class TestProjectService:
         mock_project = MagicMock()
         mock_project.archived_at = None
         mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_project
+        chain = mock_db.query.return_value.filter.return_value
+        chain.filter.return_value.first.return_value = mock_project
 
         with pytest.raises(exceptions.InvalidStateTransition):
             project_service.unarchive_project(mock_db, uuid.uuid4())

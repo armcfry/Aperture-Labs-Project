@@ -26,13 +26,18 @@ export type Project = {
     description?: string;
     createdAt: string; // ISO string
     updatedAt: string; // ISO string
-    designSpecs: string[]; //TODO: store file metadata here instead of just string
+    designSpecs: string[]; // filenames of uploaded design specs
 };
+
+export type User = { id: string; email: string } | null;
 
 type AppState = {
     theme: Theme;
     sidebarOpen: boolean;
     currentProject: Project | null;
+    user: User;
+    /** True after first client mount once we've read user from localStorage; prevents redirect before restore. */
+    hasRestoredFromStorage: boolean;
 
     /* actions */
     setTheme: (t: Theme) => void;
@@ -40,6 +45,7 @@ type AppState = {
     setSidebarOpen: (open: boolean) => void;
     toggleSidebar: () => void;
     setCurrentProject: (p: Project | null) => void;
+    setUser: (u: User) => void;
     clearProjectOnLogout: () => void;
 };
 
@@ -50,6 +56,7 @@ const DEFAULTS = {
     theme: "light" as Theme,
     sidebarOpen: true,
     currentProject: null as Project | null,
+    user: null as User,
 };
 
 /* ---------- Context ---------- */
@@ -63,6 +70,8 @@ export default function AppProvider({ children }: { children: ReactNode }) {
     const [currentProject, setCurrentProjectState] = useState<Project | null>(
         DEFAULTS.currentProject,
     );
+    const [user, setUserState] = useState<User>(DEFAULTS.user);
+    const [hasRestoredFromStorage, setHasRestoredFromStorage] = useState(false);
 
     // Hydrate from storage synchronously before paint to avoid flicker
     useLayoutEffect(() => {
@@ -71,14 +80,16 @@ export default function AppProvider({ children }: { children: ReactNode }) {
         if (stored.theme !== theme) setThemeState(stored.theme);
         if (stored.sidebarOpen !== sidebarOpen) setSidebarOpenState(stored.sidebarOpen);
         if (stored.currentProject !== currentProject) setCurrentProjectState(stored.currentProject);
+        if (stored.user !== user) setUserState(stored.user);
+        setHasRestoredFromStorage(true);
         // Note: no dependencies to run only once after mount
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // run once on mount (client only)
 
     // persist whenever these change
     useEffect(() => {
-        writeStorage({ theme, sidebarOpen, currentProject });
-    }, [theme, sidebarOpen, currentProject]);
+        writeStorage({ theme, sidebarOpen, currentProject, user });
+    }, [theme, sidebarOpen, currentProject, user]);
 
     // Apply dark mode class to <html> for Tailwind dark: variants and CSS variables
     useEffect(() => {
@@ -105,10 +116,13 @@ export default function AppProvider({ children }: { children: ReactNode }) {
 
     const setCurrentProject = (p: Project | null) => setCurrentProjectState(p ? { ...p } : null);
 
-    // Call this when the user logs out. It removes the currentProject only,
+    const setUser = (u: User) => setUserState(u);
+
+    // Call this when the user logs out. It removes the currentProject and user,
     // but keeps theme and sidebarOpen persisted.
     const clearProjectOnLogout = () => {
         setCurrentProjectState(null);
+        setUserState(null);
         try {
             if (
                 typeof localStorage === "undefined" ||
@@ -120,6 +134,7 @@ export default function AppProvider({ children }: { children: ReactNode }) {
             if (!raw) return;
             const parsed = JSON.parse(raw);
             parsed.currentProject = null;
+            parsed.user = null;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
         } catch (e) {
             // ignore
@@ -131,14 +146,17 @@ export default function AppProvider({ children }: { children: ReactNode }) {
             theme,
             sidebarOpen,
             currentProject,
+            user,
+            hasRestoredFromStorage,
             setTheme,
             toggleTheme,
             setSidebarOpen,
             toggleSidebar,
             setCurrentProject,
+            setUser,
             clearProjectOnLogout,
         }),
-        [theme, sidebarOpen, currentProject],
+        [theme, sidebarOpen, currentProject, user, hasRestoredFromStorage],
     );
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -152,7 +170,7 @@ export function useApp() {
 }
 
 /* ---------- Helpers ---------- */
-function readStorage(): { theme: Theme; sidebarOpen: boolean; currentProject: Project | null } {
+function readStorage(): { theme: Theme; sidebarOpen: boolean; currentProject: Project | null; user: User } {
     try {
         if (
             typeof window === "undefined" ||
@@ -163,6 +181,7 @@ function readStorage(): { theme: Theme; sidebarOpen: boolean; currentProject: Pr
                 theme: DEFAULTS.theme,
                 sidebarOpen: DEFAULTS.sidebarOpen,
                 currentProject: DEFAULTS.currentProject,
+                user: DEFAULTS.user,
             };
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw)
@@ -170,8 +189,17 @@ function readStorage(): { theme: Theme; sidebarOpen: boolean; currentProject: Pr
                 theme: DEFAULTS.theme,
                 sidebarOpen: DEFAULTS.sidebarOpen,
                 currentProject: DEFAULTS.currentProject,
+                user: DEFAULTS.user,
             };
         const parsed = JSON.parse(raw);
+        const storedUser = parsed?.user;
+        const user: User =
+            storedUser &&
+            typeof storedUser === "object" &&
+            typeof storedUser.id === "string" &&
+            typeof storedUser.email === "string"
+                ? { id: storedUser.id, email: storedUser.email }
+                : DEFAULTS.user;
         return {
             theme: (parsed?.theme as Theme) ?? DEFAULTS.theme,
             sidebarOpen:
@@ -179,6 +207,7 @@ function readStorage(): { theme: Theme; sidebarOpen: boolean; currentProject: Pr
                     ? parsed.sidebarOpen
                     : DEFAULTS.sidebarOpen,
             currentProject: parsed?.currentProject ?? DEFAULTS.currentProject,
+            user,
         };
     } catch (e) {
         console.warn("readStorageSafe error", e);
@@ -186,6 +215,7 @@ function readStorage(): { theme: Theme; sidebarOpen: boolean; currentProject: Pr
             theme: DEFAULTS.theme,
             sidebarOpen: DEFAULTS.sidebarOpen,
             currentProject: DEFAULTS.currentProject,
+            user: DEFAULTS.user,
         };
     }
 }
@@ -194,6 +224,7 @@ function writeStorage(payload: {
     theme: Theme;
     sidebarOpen: boolean;
     currentProject: Project | null;
+    user: User;
 }) {
     try {
         if (

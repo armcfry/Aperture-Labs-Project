@@ -10,6 +10,14 @@ export type Defect = {
     description: string;
 };
 
+/** Normalize API (high/med/low) or VLM severity string to defect severity. */
+export function normalizeSeverityToDefect(s: string | null | undefined): Defect["severity"] {
+    if (s === "high" || s === "critical") return "critical";
+    if (s === "med" || s === "major") return "major";
+    if (s === "low" || s === "minor") return "minor";
+    return "major";
+}
+
 // Approximate positions for parsed defects (spread across image when no coords given)
 const DEFAULT_POSITIONS: Array<{ x: number; y: number }> = [
     { x: 25, y: 30 },
@@ -38,7 +46,19 @@ export function parseDefectsFromResponse(response: string): Defect[] {
             currentSeverity = "minor";
         }
 
-        // Extract bullet points as defect descriptions
+        // "Location:" and "Recommended Action:" are continuation lines, not new defects
+        if (
+            defects.length > 0 &&
+            (lower.includes("location:") || lower.includes("recommended action:"))
+        ) {
+            const extra = line.replace(/^[\s\S]*?:\s*/i, "").trim();
+            if (extra && defects[defects.length - 1]) {
+                defects[defects.length - 1].description += ` — ${extra}`;
+            }
+            continue;
+        }
+
+        // Extract bullet points as defect descriptions (skip sub-bullets that are Location/Action)
         const bulletMatch = line.match(/^[\s]*[•\-*]\s*(.+)/);
         if (bulletMatch && currentSeverity) {
             const desc = bulletMatch[1].trim();
@@ -51,14 +71,6 @@ export function parseDefectsFromResponse(response: string): Defect[] {
                     description: desc,
                 });
                 defectIndex++;
-            }
-        }
-
-        // Also catch "Location:" or "Recommended Action:" continuation lines
-        if (defects.length > 0 && (lower.includes("location:") || lower.includes("recommended action:"))) {
-            const extra = line.replace(/^[\s\S]*?:\s*/i, "").trim();
-            if (extra && defects[defects.length - 1]) {
-                defects[defects.length - 1].description += ` (${extra})`;
             }
         }
     }

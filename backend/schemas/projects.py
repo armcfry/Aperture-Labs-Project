@@ -26,14 +26,14 @@ class ProjectRead(ProjectBase):
     created_at: datetime
     updated_at: datetime
     archived_at: datetime | None = None
+    deleted_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 # -------------------------
-# Upload-related schemas
+# Upload-related schemas (re-export from storage for API compatibility)
 # -------------------------
-class UploadResponse(BaseModel):
-    filename: str
-    project_id: uuid.UUID
-    object_key: str
+from schemas.storage import UploadResponseBase
+
+UploadResponse = UploadResponseBase

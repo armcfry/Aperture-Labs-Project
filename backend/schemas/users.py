@@ -7,6 +7,12 @@ class UserBase(BaseModel):
     email: EmailStr
 
 
+class UserIdentity(BaseModel):
+    """Minimal user identity (id + email). Shared by auth and user read."""
+    id: uuid.UUID
+    email: EmailStr
+
+
 class UserCreate(UserBase):
     password: str
 
@@ -16,8 +22,7 @@ class UserUpdate(BaseModel):
     password: str | None = None
 
 
-class UserRead(UserBase):
-    id: uuid.UUID
+class UserRead(UserIdentity):
     created_at: datetime
     updated_at: datetime
 

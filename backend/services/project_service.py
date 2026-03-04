@@ -28,8 +28,11 @@ def create_project(db: Session, payload: ProjectCreate) -> Project:
     return project
 
 
-def get_project(db: Session, project_id: uuid.UUID) -> Project:
-    project = db.query(Project).filter(Project.id == project_id).first()
+def get_project(db: Session, project_id: uuid.UUID, include_deleted: bool = False) -> Project:
+    query = db.query(Project).filter(Project.id == project_id)
+    if not include_deleted:
+        query = query.filter(Project.deleted_at.is_(None))
+    project = query.first()
     if not project:
         raise exceptions.ProjectNotFound()
     return project
@@ -39,7 +42,7 @@ def list_projects_for_user(
     db: Session,
     include_archived: bool = False,
 ) -> list[Project]:
-    query = db.query(Project)
+    query = db.query(Project).filter(Project.deleted_at.is_(None))
     if not include_archived:
         query = query.filter(Project.archived_at.is_(None))
     return query.order_by(Project.created_at.desc()).all()
@@ -69,15 +72,13 @@ def update_project(
 
 def delete_project(db: Session, project_id: uuid.UUID) -> None:
     project = get_project(db, project_id)
-    db.delete(project)
-    db.commit()
 
-    # Clean up the MinIO bucket and all its contents
-    try:
-        minio_client.delete_project_bucket(str(project_id))
-    except Exception:
-        # Don't fail the delete if MinIO cleanup fails
-        pass
+    if project.deleted_at is not None:
+        raise exceptions.InvalidStateTransition("Project is already deleted")
+
+    project.deleted_at = datetime.utcnow()
+    project.updated_at = datetime.utcnow()
+    db.commit()
 
 
 def archive_project(db: Session, project_id: uuid.UUID) -> Project:

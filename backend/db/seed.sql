@@ -3,10 +3,17 @@ BEGIN;
 --==============================================
 -- insert sample data for all tables
 
--- users
+-- users (MVP: password_hash stores plain password for test user)
 INSERT INTO users (
     id, email, password_hash, created_at, updated_at
 ) VALUES
+(
+    '00000000-0000-0000-0000-000000000001',
+    'test@example.com',
+    'test',
+    NOW(),
+    NOW()
+),
 (
     '11111111-1111-1111-1111-111111111111',
     'alice@example.com',
@@ -36,23 +43,13 @@ INSERT INTO projects (
 ) VALUES
 (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
-    'Valve Housing Inspection',
-    'Project for detecting surface defects on valve housing images.',
+    'Demo — FOD Inspection',
+    'Demo project with pre-loaded design spec and sample FOD image. Use for trying the app without creating your own project.',
     '11111111-1111-1111-1111-111111111111',
     NOW(),
     NOW(),
     NULL,
     'detector-v1.2.0'
-),
-(
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
-    'PCB Solder Check',
-    'Detect solder bridge and missing solder anomalies on PCB images.',
-    '22222222-2222-2222-2222-222222222222',
-    NOW(),
-    NOW(),
-    NULL,
-    'detector-v2.0.1'
 );
 
 -- project_members
@@ -76,100 +73,9 @@ INSERT INTO project_members (
     '33333333-3333-3333-3333-333333333333',
     'viewer',
     NOW()
-),
-(
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
-    '22222222-2222-2222-2222-222222222222',
-    'owner',
-    NOW()
-),
-(
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
-    '11111111-1111-1111-1111-111111111111',
-    'editor',
-    NOW()
 );
 
--- submissions
-INSERT INTO submissions (
-    id, project_id, submitted_by_user_id, submitted_at, image_id, status,
-    pass_fail, anomaly_count, error_message
-) VALUES
-(
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb001',
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
-    '11111111-1111-1111-1111-111111111111',
-    NOW() - INTERVAL '2 days',
-    'dddddddd-dddd-dddd-dddd-ddddddddd001',
-    'complete',
-    'fail',
-    2,
-    NULL
-),
-(
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb002',
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
-    '22222222-2222-2222-2222-222222222222',
-    NOW() - INTERVAL '1 day',
-    'dddddddd-dddd-dddd-dddd-ddddddddd002',
-    'complete',
-    'pass',
-    0,
-    NULL
-),
-(
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb003',
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
-    '22222222-2222-2222-2222-222222222222',
-    NOW() - INTERVAL '12 hours',
-    'dddddddd-dddd-dddd-dddd-ddddddddd003',
-    'complete_with_errors',
-    'fail',
-    1,
-    'Processed image, but one optional post-processing step failed.'
-),
-(
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb004',
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
-    '11111111-1111-1111-1111-111111111111',
-    NOW() - INTERVAL '2 hours',
-    'dddddddd-dddd-dddd-dddd-ddddddddd004',
-    'queued',
-    'unknown',
-    NULL,
-    NULL
-);
-
--- anomalies
-INSERT INTO anomalies (
-    id, submission_id, label, description, severity, confidence, created_at
-) VALUES
-(
-    'cccccccc-cccc-cccc-cccc-ccccccccc001',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb001',
-    'scratch',
-    'Visible linear scratch on outer rim.',
-    'med',
-    0.93,
-    NOW() - INTERVAL '2 days'
-),
-(
-    'cccccccc-cccc-cccc-cccc-ccccccccc002',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb001',
-    'dent',
-    'Small dent near bolt hole region.',
-    'high',
-    0.88,
-    NOW() - INTERVAL '2 days'
-),
-(
-    'cccccccc-cccc-cccc-cccc-ccccccccc003',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbb003',
-    'solder_bridge',
-    'Potential solder bridge between adjacent pads.',
-    'high',
-    0.97,
-    NOW() - INTERVAL '12 hours'
-);
+-- submissions and anomalies are seeded at runtime by seed_data.py
+-- (uploads real files to MinIO and runs FOD detection)
 
 COMMIT;

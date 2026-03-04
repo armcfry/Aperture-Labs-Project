@@ -5,6 +5,9 @@ import ClientRoot from "./ClientRoot";
 export const metadata: Metadata = {
     title: "GLaDOS",
     description: "General Local Anomoly Detection Observation System",
+    icons: {
+        icon: "/icon.svg",
+    },
 };
 
 const themeScript = `

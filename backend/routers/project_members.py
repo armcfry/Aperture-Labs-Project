@@ -8,6 +8,7 @@ from db.session import get_db
 from schemas.project_members import (
     ProjectMemberCreate,
     ProjectMemberRead,
+    ProjectMemberUpdate,
 )
 from services import project_member_service
 
@@ -75,7 +76,7 @@ def get_project_member(
 def update_project_member_role(
     project_id: UUID,
     user_id: UUID,
-    payload: ProjectMemberCreate,
+    payload: ProjectMemberUpdate,
     db: Session = Depends(get_db),
 ):
     return project_member_service.update_member_role(

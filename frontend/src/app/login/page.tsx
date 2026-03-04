@@ -6,23 +6,23 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, User, Activity, Moon, Sun, AlertCircle } from "lucide-react";
+import { Lock, User, Activity, Moon, Sun } from "lucide-react";
 import { useApp } from "@/app/AppProvider";
-import { login } from "@/lib/api";
+import { login, API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormField, FormItem, FormLabel } from "@/components/ui/form";
 
 export default function LoginPage() {
     const router = useRouter();
-    const { theme, setCurrentProject, toggleTheme } = useApp();
-    const [username, setUsername] = useState("");
+    const { theme, setCurrentProject, setUser, toggleTheme } = useApp();
+    const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Ensure there's no selected project while on the login page.
     useEffect(() => {
         setCurrentProject(null);
     }, [setCurrentProject]);
@@ -30,13 +30,27 @@ export default function LoginPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
-        if (!username.trim() || !password) return;
+        if (!email.trim() || !password) return;
         setIsLoading(true);
         try {
-            await login({ username: username.trim(), password });
-            router.push("/projects");
+            const res = await login({ email: email.trim(), password });
+            if (res.success && res.user) {
+                setUser({ id: res.user.id, email: res.user.email });
+                router.push("/projects");
+            } else {
+                setError(res.message ?? "Login failed");
+            }
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Login failed");
+            const message = err instanceof Error ? err.message : "Login failed";
+            // "Failed to fetch" usually means the API server isn't running or not reachable
+            if (message === "Failed to fetch") {
+                setError(
+                    "Cannot reach the server. Make sure the backend API is running (e.g. from backend/: uvicorn main:app --reload) and reachable at " +
+                        API_BASE_URL,
+                );
+            } else {
+                setError(message);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -74,16 +88,16 @@ export default function LoginPage() {
                         <Form onSubmit={handleSubmit}>
                             <FormField>
                                 <FormItem>
-                                    <FormLabel htmlFor="username">Username</FormLabel>
+                                    <FormLabel htmlFor="email">Email</FormLabel>
                                     <div className="relative">
                                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
                                         <Input
-                                            type="text"
-                                            id="username"
-                                            value={username}
-                                            onChange={(e) => setUsername(e.target.value)}
+                                            type="email"
+                                            id="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
                                             className="pl-10"
-                                            placeholder="Enter username"
+                                            placeholder="Enter email"
                                             required
                                         />
                                     </div>
@@ -109,10 +123,9 @@ export default function LoginPage() {
                             </FormField>
 
                             {error && (
-                                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm mb-4">
-                                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                                    <span>{error}</span>
-                                </div>
+                                <Alert variant="error" className="mb-4">
+                                    {error}
+                                </Alert>
                             )}
                             <Button type="submit" className="w-full" disabled={isLoading}>
                                 {isLoading ? "Signing in..." : "Sign In"}
@@ -122,7 +135,7 @@ export default function LoginPage() {
                     <CardFooter className="flex-col">
                         <div className="w-full pt-4 border-t border-border">
                             <p className="text-xs text-muted-foreground text-center">
-                                Demo credentials: username <code>test</code>, password <code>test</code>
+                                Demo: <code>test@example.com</code> / <code>test</code>
                             </p>
                         </div>
                     </CardFooter>

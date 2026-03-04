@@ -1,9 +1,9 @@
 #!/bin/bash
+# Backend setup for macOS/Linux (mirrors setup.bat)
 
-# Change to the directory where the script is located
-cd "$(dirname "$0")" || exit 1
+set -e
+cd "$(dirname "$0")"
 
-# Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment"
     python3 -m venv venv
@@ -12,13 +12,8 @@ else
 fi
 
 echo "Activating virtual environment"
+# shellcheck source=/dev/null
 source venv/bin/activate
-
-# Verify activation
-if [ -z "$VIRTUAL_ENV" ]; then
-    echo "ERROR: venv activation failed"
-    exit 1
-fi
 
 echo "Upgrading pip"
 python -m pip install --upgrade pip
@@ -26,4 +21,4 @@ python -m pip install --upgrade pip
 echo "Installing dependencies"
 pip install -r requirements.txt
 
-echo "Setup Complete. To start the server, run: ./start.sh"
+echo "Setup complete. To start the server, run: ./run.sh"

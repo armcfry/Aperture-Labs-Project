@@ -16,7 +16,7 @@ SonarQube: https://sonarcloud.io/project/overview?id=Aperture-Labs-SP-26_Apertur
 
 Download from https://ollama.com
 
-#### 2. Pull the model and start server
+#### 2. Pull Qwen2.5-VL and start server
 
 ```bash
 ollama pull qwen2.5vl:7b

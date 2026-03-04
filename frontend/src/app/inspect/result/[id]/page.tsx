@@ -20,13 +20,26 @@ import {
 } from "lucide-react";
 import { useApp } from "@/app/AppProvider";
 import {
+    getSubmission,
+    listAnomalies,
+    getImageUrl,
+} from "@/lib/api";
+import {
     getInspection,
     toSubmissions,
     deriveStatus,
+    isInspectionRunning,
+    INSPECTION_UPDATE_EVENT,
     type InspectionResult,
     type InspectionSubmission,
     type Defect,
 } from "@/lib/inspection-store";
+import DesignSpecPreview from "@/components/DesignSpecPreview";
+import { normalizeSeverityToDefect } from "@/lib/defect-parser";
+import { formatDateLong } from "@/lib/utils";
+import { Alert } from "@/components/ui/alert";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { DesignSpecLink, type PreviewSpec } from "@/components/DesignSpecLink";
 
 function getSeverityColor(severity: string) {
     switch (severity) {
@@ -75,6 +88,7 @@ export default function InspectResultPage() {
     const id = typeof params.id === "string" ? params.id : "";
     const [result, setResult] = useState<InspectionResult | null>(null);
     const [notFound, setNotFound] = useState(false);
+    const [previewSpec, setPreviewSpec] = useState<PreviewSpec>(null);
 
     const selectedSubIds = useMemo(() => {
         const q = searchParams.get("submissions");
@@ -94,18 +108,112 @@ export default function InspectResultPage() {
             setNotFound(true);
             return;
         }
-        const data = getInspection(id);
-        if (data) {
-            setResult(data);
-        } else {
+        function tryLoad() {
+            const data = getInspection(id);
+            if (data) {
+                setResult(data);
+                return;
+            }
+            if (id.startsWith("api-") && currentProject?.id) {
+                const submissionId = id.slice(4);
+                const projectId = currentProject.id;
+                Promise.all([
+                    getSubmission(projectId, submissionId),
+                    listAnomalies(submissionId),
+                ])
+                    .then(async ([sub, anomalies]) => {
+                        if (!sub) {
+                            setNotFound(true);
+                            return;
+                        }
+                        let imageUrl = "";
+                        try {
+                            imageUrl = await getImageUrl(sub.image_id);
+                        } catch { /* ignore */ }
+                        const photoName = sub.image_id.split("/").pop() ?? "image.png";
+                        const defects: Defect[] = anomalies.map((a, i) => ({
+                            id: a.id,
+                            location: { x: 50, y: 30 + (i * 20) % 50 },
+                            severity: normalizeSeverityToDefect(a.severity),
+                            description: a.description ?? a.label,
+                        }));
+                        const analysis = anomalies
+                            .map((a) => a.description)
+                            .filter(Boolean)
+                            .join("\n\n") || "No detailed analysis.";
+                        const passFail = sub.pass_fail === "unknown" ? "fail" : sub.pass_fail;
+                        const submission: InspectionSubmission = {
+                            id: sub.id,
+                            timestamp: sub.submitted_at,
+                            productPhoto: imageUrl,
+                            photoName,
+                            designSpec: currentProject.designSpecs ?? [],
+                            status: passFail,
+                            defects,
+                            analysis,
+                        };
+                        const inspectionResult: InspectionResult = {
+                            id: `api-${sub.id}`,
+                            imageUrl,
+                            response: analysis,
+                            timestamp: sub.submitted_at,
+                            projectId: sub.project_id,
+                            projectName: currentProject.name,
+                            submissions: [submission],
+                        };
+                        setResult(inspectionResult);
+                    })
+                    .catch(() => setNotFound(true));
+                return;
+            }
             setNotFound(true);
         }
-    }, [id]);
+        tryLoad();
+        // Retry after short delays (handles race where we navigated before store/memory cache was visible)
+        const t1 = setTimeout(() => {
+            const data = getInspection(id);
+            if (data) {
+                setResult(data);
+                setNotFound(false);
+            }
+        }, 100);
+        const t2 = setTimeout(() => {
+            const data = getInspection(id);
+            if (data) {
+                setResult(data);
+                setNotFound(false);
+            }
+        }, 250);
+        // If store updates after we mounted (e.g. save completed), try loading again
+        const onUpdate = () => {
+            const data = getInspection(id);
+            if (data) {
+                setResult(data);
+                setNotFound(false);
+            }
+        };
+        window.addEventListener(INSPECTION_UPDATE_EVENT, onUpdate);
+        return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+            window.removeEventListener(INSPECTION_UPDATE_EVENT, onUpdate);
+        };
+    }, [id, currentProject?.id, currentProject?.name, currentProject?.designSpecs]);
 
-    const handleDownloadPDF = () => {
-        alert(
-            "PDF Report would be downloaded here. In production, this would generate and download a PDF file with the inspection results."
-        );
+    const defaultTitle = "GLaDOS";
+    useEffect(() => {
+        if (!result) return;
+        const d = new Date(result.timestamp);
+        const dateStr = d.toISOString().slice(0, 10);
+        const timeStr = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        document.title = `GLaDOS Inspection Report — ${dateStr} ${timeStr}`;
+        return () => {
+            document.title = defaultTitle;
+        };
+    }, [result]);
+
+    const handlePrintReport = () => {
+        window.print();
     };
 
     if (notFound) {
@@ -136,8 +244,41 @@ export default function InspectResultPage() {
     if (!result || submissions.length === 0) {
         return (
             <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-zinc-950">
-                <div className="animate-pulse text-muted-foreground">
-                    Loading...
+                <LoadingSpinner label="Loading..." />
+            </div>
+        );
+    }
+
+    const running = isInspectionRunning(result);
+    const progress = result.progress ?? 0;
+
+    if (running) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-zinc-950 py-12 px-6">
+                <div className="max-w-md w-full text-center">
+                    <div className="w-12 h-12 border-4 border-blue-200 dark:border-blue-900 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin mx-auto mb-6" />
+                    <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+                        Analysis in progress
+                    </h2>
+                    <p className="text-slate-600 dark:text-zinc-400 mb-6">
+                        Analyzing {submissions.length} image{submissions.length !== 1 ? "s" : ""}. Results will appear here when complete.
+                    </p>
+                    <div className="w-full bg-slate-200 dark:bg-zinc-700 rounded-full h-3 overflow-hidden mb-2">
+                        <div
+                            className="bg-blue-600 dark:bg-blue-500 h-full transition-all duration-300"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+                    <p className="text-sm text-slate-500 dark:text-zinc-500 mb-8">
+                        {progress}%
+                    </p>
+                    <button
+                        onClick={() => router.push("/inspect")}
+                        className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors font-medium"
+                    >
+                        <ChevronLeft className="w-5 h-5" />
+                        Back to Dashboard
+                    </button>
                 </div>
             </div>
         );
@@ -147,15 +288,13 @@ export default function InspectResultPage() {
         (submissions[0]?.designSpec?.length ?? 0) > 0
             ? submissions[0].designSpec
             : currentProject?.designSpecs ?? [];
-    const today = new Date(result.timestamp).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-    });
+    const today = formatDateLong(result.timestamp);
     const hasCritical = submissions.some((s) =>
         s.defects.some((d) => d.severity === "critical")
     );
-    const overallStatus = hasCritical ? "FAIL" : "PASS";
+    const overallStatus = submissions.some((s) => s.status === "fail")
+        ? "FAIL"
+        : "PASS";
     const totalDefects = submissions.reduce(
         (sum, s) => sum + s.defects.length,
         0
@@ -165,27 +304,38 @@ export default function InspectResultPage() {
             sum + s.defects.filter((d) => d.severity === "critical").length,
         0
     );
+    const failWithoutDetails =
+        overallStatus === "FAIL" && totalDefects === 0;
 
     return (
-        <div className="flex-1 flex flex-col bg-slate-50 dark:bg-zinc-950 transition-colors overflow-hidden">
-            <div className="max-w-[1200px] w-full mx-auto flex-1 flex flex-col py-6">
+        <div className="flex-1 flex flex-col min-w-0 bg-slate-50 dark:bg-zinc-950 transition-colors overflow-x-auto overflow-y-auto print:!overflow-visible print:!block print:bg-white">
+                <div className="w-full max-w-[1200px] min-w-0 mx-auto flex-1 flex flex-col py-6 print:!block print:!max-w-full print:!w-full print:py-0">
                 {/* Back Button */}
                 <button
                     onClick={() => router.push("/inspect")}
-                    className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mb-6 transition-colors font-medium"
+                    className="print:hidden flex items-center gap-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mb-6 transition-colors font-medium"
                 >
                     <ChevronLeft className="w-5 h-5" />
                     <span>Back to Dashboard</span>
                 </button>
 
+                {/* Demo/Mock notice when AI was unavailable */}
+                {result.model && /mock|unavailable|offline/i.test(result.model) && (
+                    <div className="print:hidden mb-6">
+                        <Alert variant="warning">
+                            This result uses demo data because the AI service (Ollama / Qwen2.5-VL) was not reachable. For real detection, start Ollama: <code className="bg-amber-100 dark:bg-amber-500/20 px-1 rounded">ollama serve</code> and <code className="bg-amber-100 dark:bg-amber-500/20 px-1 rounded">ollama pull qwen2.5vl:7b</code>.
+                        </Alert>
+                    </div>
+                )}
+
                 {/* Action Buttons */}
-                <div className="flex gap-4 mb-6">
+                <div className="print:hidden flex gap-4 mb-6">
                     <button
-                        onClick={handleDownloadPDF}
+                        onClick={handlePrintReport}
                         className="flex-1 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white font-semibold py-4 px-6 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
                     >
                         <Download className="w-5 h-5" />
-                        Download PDF Report
+                        Print / Save as PDF
                     </button>
                     <button
                         onClick={() => router.push("/inspect")}
@@ -197,7 +347,7 @@ export default function InspectResultPage() {
 
                 {/* Submission Counter */}
                 {submissions.length > 1 && (
-                    <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-xl p-4 mb-6">
+                    <div className="print:hidden bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-xl p-4 mb-6">
                         <div className="flex items-center gap-2">
                             <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                             <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
@@ -210,11 +360,11 @@ export default function InspectResultPage() {
                 )}
 
                 {/* PDF-Style Report Preview */}
-                <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-slate-200 dark:border-zinc-800 overflow-hidden">
+                <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-slate-200 dark:border-zinc-800 overflow-hidden print:!overflow-visible print:shadow-none print:border-0 print:rounded-none print:max-w-full min-w-0 max-w-full">
                     {/* Report Header */}
-                    <div className="bg-slate-100 dark:bg-zinc-800 px-8 py-6 border-b border-slate-200 dark:border-zinc-700">
-                        <div className="flex items-start justify-between mb-4">
-                            <div>
+                    <div className="bg-slate-100 dark:bg-zinc-800 px-8 py-6 border-b border-slate-200 dark:border-zinc-700 print:px-4 print:py-4">
+                        <div className="flex flex-wrap items-start justify-between gap-4 min-w-0">
+                            <div className="min-w-0 flex-1">
                                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">
                                     Quality Inspection Report
                                 </h1>
@@ -222,7 +372,7 @@ export default function InspectResultPage() {
                                     AI-Powered Anomaly Detection Analysis
                                 </p>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right flex-shrink-0 min-w-0">
                                 <div className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 text-sm mb-1">
                                     <Calendar className="w-4 h-4" />
                                     <span>{today}</span>
@@ -241,13 +391,24 @@ export default function InspectResultPage() {
                     </div>
 
                     {/* Report Content */}
-                    <div className="p-8">
+                    <div className="p-8 print:p-4 min-w-0">
                         {/* Inspection Summary */}
-                        <section className="mb-8">
+                        <section className="mb-8 min-w-0">
                             <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                                 <FileCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                 Inspection Summary
                             </h2>
+
+                            {failWithoutDetails && (
+                                <div className="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-200">
+                                    <p className="text-sm font-medium mb-1">
+                                        Result: FAIL — no defect details available
+                                    </p>
+                                    <p className="text-sm text-amber-700 dark:text-amber-300/90">
+                                        This inspection was marked FAIL by the detection system, but no defect list or analysis text was returned. The result may come from an external submission or a run where detailed output was not stored.
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Design Specifications */}
                             {designSpecs.length > 0 && (
@@ -256,24 +417,38 @@ export default function InspectResultPage() {
                                         Design Specifications (
                                         {designSpecs.length})
                                     </p>
-                                    <div className="max-h-40 overflow-y-auto pr-2">
+                                    <div className="max-h-40 overflow-y-auto pr-2 print:!max-h-none print:!overflow-visible">
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                             {designSpecs.map((spec, index) => (
-                                                <div
+                                                <DesignSpecLink
                                                     key={index}
-                                                    className="flex items-start gap-2"
-                                                >
-                                                    <span className="text-slate-400 dark:text-zinc-600 text-sm mt-0.5">
-                                                        •
-                                                    </span>
-                                                    <p className="text-sm text-slate-900 dark:text-white flex-1 break-words">
-                                                        {spec}
-                                                    </p>
-                                                </div>
+                                                    spec={spec}
+                                                    onPreview={() =>
+                                                        currentProject &&
+                                                        setPreviewSpec({
+                                                            projectId: currentProject.id,
+                                                            filename: spec,
+                                                        })
+                                                    }
+                                                    className="text-sm text-slate-900 dark:text-white flex-1 break-words group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:underline transition-colors"
+                                                    leading={
+                                                        <span className="text-slate-400 dark:text-zinc-600">
+                                                            •
+                                                        </span>
+                                                    }
+                                                />
                                             ))}
                                         </div>
                                     </div>
                                 </div>
+                            )}
+
+                            {previewSpec && (
+                                <DesignSpecPreview
+                                    projectId={previewSpec.projectId}
+                                    filename={previewSpec.filename}
+                                    onClose={() => setPreviewSpec(null)}
+                                />
                             )}
 
                             {/* Stats Grid */}
@@ -308,24 +483,24 @@ export default function InspectResultPage() {
                             {(result.projectName ||
                                 result.model ||
                                 result.inferenceTimeMs != null) && (
-                                <div className="grid grid-cols-2 gap-4 mt-4">
+                                <div className="grid grid-cols-2 gap-4 mt-4 min-w-0">
                                     {result.projectName && (
-                                        <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg p-4 border border-slate-200 dark:border-zinc-700">
+                                        <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg p-4 border border-slate-200 dark:border-zinc-700 min-w-0 overflow-hidden">
                                             <p className="text-sm text-slate-600 dark:text-zinc-400 mb-1">
                                                 Project
                                             </p>
-                                            <p className="text-lg font-bold text-slate-900 dark:text-white">
+                                            <p className="text-lg font-bold text-slate-900 dark:text-white break-words">
                                                 {result.projectName}
                                             </p>
                                         </div>
                                     )}
                                     {(result.model ||
                                         result.inferenceTimeMs != null) && (
-                                        <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg p-4 border border-slate-200 dark:border-zinc-700">
+                                        <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg p-4 border border-slate-200 dark:border-zinc-700 min-w-0 overflow-hidden">
                                             <p className="text-sm text-slate-600 dark:text-zinc-400 mb-1">
                                                 Model / Inference
                                             </p>
-                                            <p className="text-sm font-medium text-slate-900 dark:text-white">
+                                            <p className="text-sm font-medium text-slate-900 dark:text-white break-words">
                                                 {result.model && (
                                                     <span>{result.model}</span>
                                                 )}
@@ -385,15 +560,15 @@ export default function InspectResultPage() {
                                 )}
 
                                 {/* Product Image with Defect Markers */}
-                                <section className="mb-8">
+                                <section className="mb-8 min-w-0">
                                     <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                                         Product Image
                                     </h3>
-                                    <div className="relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700">
+                                    <div className="relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 min-w-0 print-report-image">
                                         <img
                                             src={submission.productPhoto}
                                             alt={`Product ${submissionIndex + 1}`}
-                                            className="w-full h-auto"
+                                            className="w-full max-w-full h-auto object-contain"
                                         />
                                         {submission.defects.map(
                                             (defect: Defect) => (
@@ -492,23 +667,25 @@ export default function InspectResultPage() {
                                     )}
                                 </section>
 
-                                {/* Detailed Analysis */}
-                                <section>
-                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-                                        Detailed Analysis
-                                    </h3>
-                                    <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg p-6 border border-slate-200 dark:border-zinc-700">
-                                        <pre className="whitespace-pre-wrap font-mono text-sm text-slate-700 dark:text-zinc-300 leading-relaxed">
-                                            {submission.analysis}
-                                        </pre>
-                                    </div>
-                                </section>
+                                {/* Full Analysis: show whenever we have analysis text (so "see full analysis above" has content) */}
+                                {submission.analysis?.trim() && (
+                                    <section className="mt-8">
+                                        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+                                            Full Analysis
+                                        </h3>
+                                        <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg p-6 border border-slate-200 dark:border-zinc-700">
+                                            <pre className="whitespace-pre-wrap font-mono text-sm text-slate-700 dark:text-zinc-300 leading-relaxed">
+                                                {submission.analysis}
+                                            </pre>
+                                        </div>
+                                    </section>
+                                )}
                             </div>
                         ))}
                     </div>
 
                     {/* Report Footer */}
-                    <div className="bg-slate-100 dark:bg-zinc-800 px-8 py-4 border-t border-slate-200 dark:border-zinc-700">
+                    <div className="print-report-footer bg-slate-100 dark:bg-zinc-800 px-8 py-4 border-t border-slate-200 dark:border-zinc-700 print:px-4">
                         <p className="text-sm text-slate-600 dark:text-zinc-400 text-center">
                             Generated by GLaDOS AI Anomaly Detection System •{" "}
                             {today}

@@ -5,95 +5,210 @@
 export const API_BASE_URL =
     (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) || "http://localhost:8000";
 
+/**
+ * Parse JSON response and throw a consistent Error with detail when !res.ok.
+ */
+async function parseJsonResponse<T>(res: Response, fallbackMessage: string): Promise<T> {
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const detail = (data as { detail?: string; message?: string }).detail
+            ?? (data as { detail?: string; message?: string }).message
+            ?? fallbackMessage;
+        throw new Error(detail);
+    }
+    return data as T;
+}
+
 /* ---------- Auth ---------- */
-export type LoginRequest = { username: string; password: string };
+export type LoginRequest = { email: string; password: string };
 export type LoginResponse = {
     success: boolean;
-    user?: { username: string };
+    user?: { id: string; email: string };
     message?: string;
 };
 
 export async function login(credentials: LoginRequest): Promise<LoginResponse> {
-    const res = await fetch(`${API_BASE_URL}/api/login`, {
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        throw new Error(data.detail ?? data.message ?? `Login failed: ${res.status}`);
-    }
-    return data;
+    return parseJsonResponse<LoginResponse>(res, `Login failed: ${res.status}`);
 }
 
 /* ---------- Projects ---------- */
 export type ApiProject = {
     id: string;
     name: string;
+    description?: string;
     created_at: string;
-    design_specs: Array<{ filename: string; object_key: string; uploaded_at: string }>;
+    updated_at: string;
+    archived_at?: string | null;
 };
 
-export type ProjectListResponse = { projects: ApiProject[] };
-
-export async function listProjects(): Promise<ProjectListResponse> {
-    const res = await fetch(`${API_BASE_URL}/api/projects/list`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        throw new Error(data.detail ?? `Failed to list projects: ${res.status}`);
-    }
-    return data;
+export async function listProjects(): Promise<ApiProject[]> {
+    const res = await fetch(`${API_BASE_URL}/projects`);
+    const data = await parseJsonResponse<ApiProject[] | unknown>(res, `Failed to list projects: ${res.status}`);
+    return Array.isArray(data) ? data : [];
 }
 
-export async function createProject(name: string): Promise<ApiProject> {
-    const res = await fetch(`${API_BASE_URL}/api/projects/create`, {
+export async function createProject(payload: {
+    name: string;
+    description?: string;
+}): Promise<ApiProject> {
+    const res = await fetch(`${API_BASE_URL}/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(payload),
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        throw new Error(data.detail ?? `Failed to create project: ${res.status}`);
-    }
-    return data;
+    return parseJsonResponse<ApiProject>(res, `Failed to create project: ${res.status}`);
+}
+
+export async function archiveProject(projectId: string): Promise<ApiProject> {
+    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/archive`, {
+        method: "POST",
+    });
+    return parseJsonResponse<ApiProject>(res, `Failed to archive project: ${res.status}`);
+}
+
+export async function deleteProject(projectId: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}`, {
+        method: "DELETE",
+    });
+    await parseJsonResponse<unknown>(res, `Failed to delete project: ${res.status}`);
+}
+
+/* ---------- Storage ---------- */
+export async function listDesignSpecs(projectId: string): Promise<string[]> {
+    const res = await fetch(
+        `${API_BASE_URL}/storage/designs?project_id=${encodeURIComponent(projectId)}`,
+    );
+    const data = await parseJsonResponse<string[] | unknown>(res, `Failed to list design specs: ${res.status}`);
+    return Array.isArray(data) ? data : [];
 }
 
 export async function uploadDesignSpec(
     projectId: string,
-    file: File
+    file: File,
 ): Promise<{ filename: string; project_id: string; object_key: string }> {
     const formData = new FormData();
     formData.append("file", file);
     const res = await fetch(
-        `${API_BASE_URL}/api/upload/design?project_id=${encodeURIComponent(projectId)}`,
-        { method: "POST", body: formData }
+        `${API_BASE_URL}/storage/design?project_id=${encodeURIComponent(projectId)}`,
+        { method: "POST", body: formData },
     );
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        throw new Error(data.detail ?? `Failed to upload design spec: ${res.status}`);
-    }
-    return data;
+    return parseJsonResponse(res, `Failed to upload design spec: ${res.status}`);
 }
 
-/* ---------- Detection ---------- */
+export async function uploadImage(
+    projectId: string,
+    userId: string,
+    file: File,
+): Promise<{ filename: string; project_id: string; object_key: string; submission_id: string }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(
+        `${API_BASE_URL}/storage/image?project_id=${encodeURIComponent(projectId)}&user_id=${encodeURIComponent(userId)}`,
+        { method: "POST", body: formData },
+    );
+    return parseJsonResponse(res, `Failed to upload image: ${res.status}`);
+}
+
+export async function getDesignSpecUrl(projectId: string, filename: string): Promise<string> {
+    const objectKey = `${projectId}/designs/${filename}`;
+    const res = await fetch(
+        `${API_BASE_URL}/storage/design/${encodeURIComponent(objectKey)}?expires=900&download=false`,
+    );
+    const data = await parseJsonResponse<{ url: string }>(res, `Failed to get design spec URL: ${res.status}`);
+    return data.url;
+}
+
+/* ---------- Submissions ---------- */
+export type ApiSubmission = {
+    id: string;
+    project_id: string;
+    submitted_by_user_id: string;
+    submitted_at: string;
+    image_id: string;
+    status: string;
+    pass_fail: "pass" | "fail" | "unknown";
+    anomaly_count: number | null;
+    error_message: string | null;
+};
+
+export type ApiAnomaly = {
+    id: string;
+    submission_id: string;
+    label: string;
+    description: string | null;
+    severity: "low" | "med" | "high" | null;
+    confidence: number | null;
+    created_at: string;
+};
+
+export async function listSubmissions(projectId: string): Promise<ApiSubmission[]> {
+    const res = await fetch(
+        `${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/submissions`,
+    );
+    const data = await parseJsonResponse<ApiSubmission[] | unknown>(res, `Failed to list submissions: ${res.status}`);
+    return Array.isArray(data) ? data : [];
+}
+
+export async function listAnomalies(submissionId: string): Promise<ApiAnomaly[]> {
+    const res = await fetch(
+        `${API_BASE_URL}/anomalies?submission_id=${encodeURIComponent(submissionId)}`,
+    );
+    const data = await parseJsonResponse<ApiAnomaly[] | unknown>(res, `Failed to list anomalies: ${res.status}`);
+    return Array.isArray(data) ? data : [];
+}
+
+export async function getSubmission(
+    projectId: string,
+    submissionId: string,
+): Promise<ApiSubmission | null> {
+    const res = await fetch(
+        `${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/submissions/${encodeURIComponent(submissionId)}`,
+    );
+    if (res.status === 404) return null;
+    return parseJsonResponse<ApiSubmission>(res, `Failed to get submission: ${res.status}`);
+}
+
+export async function getImageUrl(objectKey: string): Promise<string> {
+    const encodedKey = objectKey.split("/").map(encodeURIComponent).join("/");
+    const res = await fetch(
+        `${API_BASE_URL}/storage/image/${encodedKey}?expires=900&download=false`,
+    );
+    const data = await parseJsonResponse<{ url: string }>(res, `Failed to get image URL: ${res.status}`);
+    return data.url;
+}
+
+/* ---------- Detection (sync, for immediate results) ---------- */
 export type DetectionResponse = {
     response: string;
     model?: string;
     inference_time_ms?: number;
+    pass_fail?: "pass" | "fail";
+    /** When the backend parses (x%, y%) from the VLM, coordinates are real. */
+    defects?: Array<{
+        id: string;
+        location: { x: number; y: number };
+        severity: string;
+        description: string;
+    }>;
 };
 
 export async function detectFod(file: File): Promise<DetectionResponse> {
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch(`${API_BASE_URL}/api/detect`, {
+    const res = await fetch(`${API_BASE_URL}/detect`, {
         method: "POST",
         body: formData,
     });
 
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(err.detail ?? `Detection failed: ${res.status}`);
+        throw new Error((err as { detail?: string }).detail ?? `Detection failed: ${res.status}`);
     }
 
     return res.json();
