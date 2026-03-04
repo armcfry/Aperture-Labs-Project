@@ -13,12 +13,14 @@ pytestmark = pytest.mark.unit
 class TestUserService:
 
     def test_create_user_success(self):
-        """Test creating a new user."""
+        """Test creating a new user hashes the password before storing."""
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
         payload = UserCreate(email="new@example.com", password="fake-test-pw-789")  # noqa: S105
-        user_service.create_user(mock_db, payload)
+        with patch("services.user_service.security.hash_password", return_value="hashed") as mock_hash:
+            user_service.create_user(mock_db, payload)
+            mock_hash.assert_called_once_with("fake-test-pw-789")  # noqa: S105
 
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()

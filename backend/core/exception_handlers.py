@@ -39,6 +39,14 @@ def submission_not_found_handler(request: Request, exc: exceptions.SubmissionNot
     )
 
 
+def unauthorized_handler(request: Request, exc: exceptions.Unauthorized):
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": exc.detail},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 def permission_denied_handler(request: Request, exc: exceptions.PermissionDenied):
     return JSONResponse(
         status_code=status.HTTP_403_FORBIDDEN,

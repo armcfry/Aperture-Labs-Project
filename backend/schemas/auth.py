@@ -13,6 +13,6 @@ class UserInfo(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    success: bool
-    user: UserInfo | None = None
-    message: str | None = None
+    access_token: str
+    token_type: str = "bearer"
+    user: UserInfo
