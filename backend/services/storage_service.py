@@ -11,6 +11,12 @@ from services import minio_client
 from services import detection_service
 from services import project_service
 from core import exceptions
+from utils.file_validation import (
+    MAX_IMAGE_UPLOAD_BYTES,
+    MAX_DESIGN_UPLOAD_BYTES,
+    is_image,
+    is_pdf,
+)
 
 
 def _validate_upload_file(
@@ -48,6 +54,16 @@ async def upload_image(
 
     # Upload image to MinIO
     contents = await file.read()
+    if len(contents) > MAX_IMAGE_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum size is {MAX_IMAGE_UPLOAD_BYTES // (1024 * 1024)} MB",
+        )
+    if not is_image(contents):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File content is not a valid PNG or JPEG image",
+        )
     bucket = str(project_id)
     object_name = f"images/{file.filename}"
 
@@ -100,6 +116,16 @@ async def upload_design(
     content_type = file.content_type or ""
 
     contents = await file.read()
+    if len(contents) > MAX_DESIGN_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum size is {MAX_DESIGN_UPLOAD_BYTES // (1024 * 1024)} MB",
+        )
+    if content_type == "application/pdf" and not is_pdf(contents):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File content is not a valid PDF",
+        )
     bucket = str(project_id)
     object_name = f"designs/{file.filename}"
 
