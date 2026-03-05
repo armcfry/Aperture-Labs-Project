@@ -66,7 +66,7 @@ const INSPECTION_UPDATE_EVENT = "glados:inspections-updated";
 
 /** Save a single inspection (legacy or new batch) */
 export function saveInspection(result: Omit<InspectionResult, "id">): string {
-    const id = `insp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const id = `insp-${globalThis.crypto.randomUUID()}`;
     const full: InspectionResult = { ...result, id };
     const store = getStore();
     store[id] = full;
@@ -85,7 +85,7 @@ export function saveInspectionBatch(params: {
     projectName?: string;
     designSpecs: string[];
 }): string {
-    const id = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const id = `batch-${globalThis.crypto.randomUUID()}`;
     const subs: InspectionSubmission[] = params.submissions.map((s, i) => ({
         ...s,
         id: `${id}-sub-${i}`,
@@ -120,7 +120,7 @@ export function saveInspectionPlaceholder(params: {
     designSpecs: string[];
     submissions: Array<{ productPhoto: string; photoName: string }>;
 }): string {
-    const id = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const id = `batch-${globalThis.crypto.randomUUID()}`;
     const now = new Date().toISOString();
     const subs: InspectionSubmission[] = params.submissions.map((s, i) => ({
         id: `${id}-sub-${i}`,
