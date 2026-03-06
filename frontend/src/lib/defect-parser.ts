@@ -5,19 +5,17 @@
 
 export type Defect = {
     id: string;
-    location: { x: number; y: number };
     severity: "critical" | "major" | "minor";
     description: string;
 };
 
-// Approximate positions for parsed defects (spread across image when no coords given)
-const DEFAULT_POSITIONS: Array<{ x: number; y: number }> = [
-    { x: 25, y: 30 },
-    { x: 50, y: 50 },
-    { x: 75, y: 35 },
-    { x: 35, y: 70 },
-    { x: 65, y: 65 },
-];
+/** Normalize API (high/med/low) or VLM severity string to defect severity. */
+export function normalizeSeverityToDefect(s: string | null | undefined): Defect["severity"] {
+    if (s === "high" || s === "critical") return "critical";
+    if (s === "med" || s === "major") return "major";
+    if (s === "low" || s === "minor") return "minor";
+    return "major";
+}
 
 export function parseDefectsFromResponse(response: string): Defect[] {
     const defects: Defect[] = [];
@@ -38,27 +36,30 @@ export function parseDefectsFromResponse(response: string): Defect[] {
             currentSeverity = "minor";
         }
 
-        // Extract bullet points as defect descriptions
+        // "Location:" and "Recommended Action:" are continuation lines, not new defects
+        if (
+            defects.length > 0 &&
+            (lower.includes("location:") || lower.includes("recommended action:"))
+        ) {
+            const extra = line.replace(/^[\s\S]*?:\s*/i, "").trim();
+            const last = defects.at(-1);
+            if (extra && last) {
+                last.description += ` — ${extra}`;
+            }
+            continue;
+        }
+
+        // Extract bullet points as defect descriptions (skip sub-bullets that are Location/Action)
         const bulletMatch = line.match(/^[\s]*[•\-*]\s*(.+)/);
         if (bulletMatch && currentSeverity) {
             const desc = bulletMatch[1].trim();
             if (desc.length > 5) {
-                const pos = DEFAULT_POSITIONS[defectIndex % DEFAULT_POSITIONS.length];
                 defects.push({
                     id: `DEF-${String(defectIndex + 1).padStart(3, "0")}`,
-                    location: pos,
                     severity: currentSeverity,
                     description: desc,
                 });
                 defectIndex++;
-            }
-        }
-
-        // Also catch "Location:" or "Recommended Action:" continuation lines
-        if (defects.length > 0 && (lower.includes("location:") || lower.includes("recommended action:"))) {
-            const extra = line.replace(/^[\s\S]*?:\s*/i, "").trim();
-            if (extra && defects[defects.length - 1]) {
-                defects[defects.length - 1].description += ` (${extra})`;
             }
         }
     }
@@ -70,7 +71,6 @@ export function parseDefectsFromResponse(response: string): Defect[] {
             const snippet = response.slice(0, 200).replace(/\s+/g, " ").trim();
             defects.push({
                 id: "DEF-001",
-                location: { x: 50, y: 50 },
                 severity: response.toLowerCase().includes("critical") ? "critical" : "major",
                 description: snippet || "Anomaly detected (see full analysis below)",
             });

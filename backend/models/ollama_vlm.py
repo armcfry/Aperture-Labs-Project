@@ -1,24 +1,160 @@
 """
 Ollama-based VLM for FOD Detection
+Uses Qwen2.5-VL by default (ollama pull qwen2.5vl or qwen2.5vl:7b).
 """
 
 import base64
 import io
+import os
+import re
 import time
 from typing import Optional
 import requests
 from PIL import Image
 
-from schemas.detection import DetectionResponse
+from schemas.detection import DetectionResponse, DefectSchema
+
+# Default: Qwen2.5-VL 7B. Override with env OLLAMA_VLM_MODEL (e.g. qwen2.5vl:72b).
+DEFAULT_MODEL = os.environ.get("OLLAMA_VLM_MODEL", "qwen2.5vl:7b")
+
+def _parse_pass_fail(response: str) -> str:
+    """Extract pass/fail from response. Expects 'RESULT: PASS' or 'RESULT: FAIL'."""
+    lower = response.lower().strip()
+    if "result: pass" in lower or "result:pass" in lower:
+        return "pass"
+    if "result: fail" in lower or "result:fail" in lower:
+        return "fail"
+    # Out-of-scope / wrong context → fail
+    if any(p in lower for p in ("out of scope", "does not show", "not show a runway", "not an inspection area", "unrelated to", "wrong context")):
+        return "fail"
+    # Fallback: infer from content
+    if any(p in lower for p in ("no fod", "no foreign object", "no debris", "clear", "no visible defect")):
+        return "pass"
+    if any(p in lower for p in ("fod", "foreign object", "debris", "defect", "anomaly")):
+        return "fail"
+    return "fail"
+
+
+def _severity_from_line(line: str) -> Optional[str]:
+    """Return severity keyword if line looks like a severity header."""
+    lower = line.lower()
+    if "critical" in lower and ("failure" in lower or ":" in lower):
+        return "critical"
+    if "major" in lower and ("issue" in lower or ":" in lower):
+        return "major"
+    if "minor" in lower and ("issue" in lower or ":" in lower):
+        return "minor"
+    return None
+
+
+def _parse_one_bullet(rest: str, current_severity: str, defect_index: int) -> Optional[dict]:
+    """Parse a bullet line into one defect entry dict, or None if too short."""
+    if len(rest) < 5:
+        return None
+    return {
+        "id": f"DEF-{str(defect_index + 1).zfill(3)}",
+        "severity": current_severity,
+        "description": rest.strip(),
+    }
+
+
+def _fallback_defect(response: str) -> Optional[DefectSchema]:
+    """If response mentions FOD/defect but no structured defects, return a single fallback defect."""
+    if not re.search(r"\b(fod|foreign object|debris|defect|anomal)\b", response, re.I):
+        return None
+    snippet = response[:200].replace("\n", " ").strip()
+    severity = "critical" if "critical" in response.lower() else "major"
+    return DefectSchema(
+        id="DEF-001",
+        severity=severity,
+        description=snippet or "Anomaly detected (see full analysis below)",
+    )
+
+
+def _is_continuation_line(stripped: str) -> bool:
+    return stripped.startswith("location:") or stripped.startswith("recommended action:")
+
+
+def _append_continuation(entries: list[dict], line: str) -> None:
+    extra = re.sub(r"^[\s\S]*?:\s*", "", line, flags=re.I).strip()
+    if extra:
+        entries[-1]["description"] += f" — {extra}"
+
+
+def _parse_defects_from_response(response: str) -> list[DefectSchema]:
+    """Parse VLM response into defects."""
+    entries: list[dict] = []
+    current_severity: Optional[str] = None
+    defect_index = 0
+
+    for line in response.splitlines():
+        if severity := _severity_from_line(line):
+            current_severity = severity
+
+        stripped = line.lower().strip()
+        if entries and _is_continuation_line(stripped):
+            _append_continuation(entries, line)
+            continue
+
+        bullet_match = re.match(r"^[\s]*[•\-*]\s*(.+)", line)
+        if bullet_match and current_severity:
+            entry = _parse_one_bullet(bullet_match[1].strip(), current_severity, defect_index)
+            if entry:
+                entries.append(entry)
+                defect_index += 1
+
+    defects = [
+        DefectSchema(id=e["id"], severity=e["severity"], description=e["description"])
+        for e in entries
+    ]
+    fallback = _fallback_defect(response)
+    if not defects and fallback:
+        defects.append(fallback)
+    return defects
+
+
+def get_mock_detection_response() -> DetectionResponse:
+    """Return a mock detection result when Ollama is unavailable (e.g. not running or timeout)."""
+    mock_text = """INSPECTION SUMMARY (Demo - AI service unavailable)
+
+Ollama was not reachable. For real detection use Qwen2.5-VL: run `ollama serve` and `ollama pull qwen2.5vl:7b` (or `ollama pull qwen2.5vl`).
+
+Specification: Design specs
+Images Analyzed: 1
+Defects Detected: 2 anomalies found
+Status: FAIL - Defects present
+
+CRITICAL FAILURES:
+• Surface Integrity: Foreign object detected (25%, 30%)
+  - Location: Upper-left quadrant
+  - Recommended Action: Reject and rework
+
+MAJOR ISSUES:
+• Debris detected at center region (50%, 50%)
+  - Recommended Action: Quality review required
+
+RECOMMENDATION: Product does not meet manufacturing specifications. Immediate rework required.
+RESULT: FAIL"""
+    defects = _parse_defects_from_response(mock_text)
+    model = OllamaVLM(model_name="mock")
+    mock_prompt = model._default_generic_prompt()
+    return DetectionResponse(
+        response=mock_text,
+        model="mock (Ollama/Qwen2.5-VL unavailable)",
+        inference_time_ms=0,
+        pass_fail="fail",
+        defects=defects,
+        prompt_used=mock_prompt,
+    )
 
 
 class OllamaVLM:
     def __init__(
         self,
-        model_name: str = "qwen2.5vl:7b",
+        model_name: Optional[str] = None,
         ollama_host: str = "http://localhost:11434"
     ):
-        self.model_name = model_name
+        self.model_name = model_name if model_name is not None else DEFAULT_MODEL
         self.ollama_host = ollama_host
         self.is_loaded = False
 
@@ -32,13 +168,15 @@ class OllamaVLM:
         except requests.exceptions.ConnectionError:
             return False
 
-    def detect_fod(self, image: Image.Image, prompt: Optional[str] = None) -> DetectionResponse:
+    def detect_fod(self, image: Image.Image, prompt: Optional[str] = None, spec_text: Optional[str] = None) -> DetectionResponse:
         """
-        Analyze an image for Foreign Object Debris using the configured VLM.
+        Analyze an image for quality / defect detection using the configured VLM.
 
         Args:
-            image: PIL Image to analyze to be converted to base64 PNG.
-            prompt: Custom prompt for the VLM. If None, uses default FOD detection prompt.
+            image: PIL Image to analyze (converted to base64 PNG).
+            prompt: Custom full prompt for the VLM. If None, a generic prompt is built from spec_text or default.
+            spec_text: Optional specification text (e.g. from design PDFs). When provided, the model is asked
+                       to inspect the image according to this specification. Ignored if prompt is set.
 
         Returns:
             DetectionResponse containing the model's response, model name, and inference time.
@@ -47,10 +185,10 @@ class OllamaVLM:
             self.load_model()
 
         if prompt is None:
-            prompt = (
-                "Identify all instances of Foreign Object Debris (FOD) in this image. "
-                "For each item, describe what it is and specify its approximate location."
-            )
+            if spec_text and spec_text.strip():
+                prompt = self._build_spec_prompt(spec_text.strip())
+            else:
+                prompt = self._default_generic_prompt()
 
         image_base64 = self._image_to_base64(image)
 
@@ -74,29 +212,93 @@ class OllamaVLM:
         if response.status_code == 200:
             raw_response = response.json().get("response", "")
             print(raw_response)
+            pass_fail = _parse_pass_fail(raw_response)
+            defects = _parse_defects_from_response(raw_response)
+            if pass_fail == "fail" and not defects:
+                defects = [
+                    DefectSchema(
+                        id="DEF-001",
+                        severity="major",
+                        description="Inspection failed. See full analysis above for details.",
+                    )
+                ]
             return DetectionResponse(
                 response=raw_response,
                 model=self.model_name,
-                inference_time_ms=inference_time
+                inference_time_ms=inference_time,
+                pass_fail=pass_fail,
+                defects=defects if defects else None,
+                prompt_used=prompt,
             )
         else:
             error = f"Error: {response.status_code}"
             return DetectionResponse(
                 response=error,
                 model=self.model_name,
-                inference_time_ms=inference_time
+                inference_time_ms=inference_time,
+                pass_fail="fail",
+                defects=[
+                    DefectSchema(
+                        id="DEF-001",
+                        severity="major",
+                        description=error + ". Detection request failed.",
+                    )
+                ],
+                prompt_used=prompt,
             )
+
+    @staticmethod
+    def _prompt_rules() -> str:
+        return (
+            "3) You must end your response with exactly one line: RESULT: PASS or RESULT: FAIL.\n\n"
+            "Do not respond with only 'RESULT: PASS' or 'RESULT: FAIL'. Always include a short description and reason."
+        )
+
+    def _default_generic_prompt(self) -> str:
+        """Generic inspection prompt when no spec is provided (versatile, not domain-specific)."""
+        return (
+            "You are a quality inspector. Analyze this image and determine whether it passes or fails inspection.\n\n"
+            "1) Describe what you see and whether it matches a typical inspection context (e.g. product, surface, or scene to be checked). "
+            "If the image clearly does NOT show something that can be inspected (e.g. irrelevant artwork or out-of-scope content), "
+            "briefly explain and end with: RESULT: FAIL.\n\n"
+            "2) If the image is suitable for inspection, check for defects, anomalies, or issues:\n"
+            "   - If you find NO issues: explain why it passes. End with: RESULT: PASS\n"
+            "   - If you find issues: list each defect with severity (CRITICAL FAILURES, MAJOR ISSUES, or MINOR ISSUES) and approximate position (X%, Y%). End with: RESULT: FAIL\n"
+            + self._prompt_rules()
+        )
+
+    def _build_spec_prompt(self, spec_text: str) -> str:
+        """Build a generic prompt that injects the provided specification (e.g. from PDF)."""
+        return (
+            "You are a quality inspector. Inspect this image according to the following specification.\n\n"
+            "--- Specification ---\n"
+            f"{spec_text}\n"
+            "--- End specification ---\n\n"
+            "1) Describe what you see and whether it is relevant to the specification. "
+            "If the image clearly does NOT match the inspection scope described above, briefly explain and end with: RESULT: FAIL.\n\n"
+            "2) If the image is in scope, evaluate it against the specification:\n"
+            "   - If the image meets the criteria (no defects or issues listed in the spec): explain why. End with: RESULT: PASS\n"
+            "   - If you find defects or non-conformities: list each with severity (CRITICAL FAILURES, MAJOR ISSUES, or MINOR ISSUES) and approximate position (X%, Y%). End with: RESULT: FAIL\n"
+            + self._prompt_rules()
+        )
 
     def _image_to_base64(self, image: Image.Image) -> str:
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
+    def get_prompt_for_spec(self, spec_text: str | None) -> str:
+        """Return the full prompt (generic + spec) that would be sent to the VLM for the given spec text."""
+        if spec_text and spec_text.strip():
+            return self._build_spec_prompt(spec_text.strip())
+        return self._default_generic_prompt()
+
 
 # Singleton ensures that there's only one instance of OllmaVLM. Used by get_model()
 _instances: dict[str, OllamaVLM] = {}
 
-def get_model(model_name: str = "qwen2.5vl:7b") -> OllamaVLM:
-    if model_name not in _instances:
-        _instances[model_name] = OllamaVLM(model_name=model_name)
-    return _instances[model_name]
+def get_model(model_name: Optional[str] = None) -> OllamaVLM:
+    name = model_name if model_name is not None else DEFAULT_MODEL
+    if name not in _instances:
+        _instances[name] = OllamaVLM(model_name=name)
+    return _instances[name]

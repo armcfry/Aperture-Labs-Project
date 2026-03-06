@@ -5,48 +5,82 @@
  * Supports multiple product photos with batch processing and per-image progress.
  * Styled after AI Anomaly Detection Tool Dashboard.
  * Stays on dashboard after analysis (adds to history, no auto-navigation).
+ * Analysis continues in the background if user navigates away; result is saved when done.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Image, FileText, AlertCircle, X } from "lucide-react";
+import { Image, FileDiff, FileText, X } from "lucide-react";
 import { useApp } from "@/app/AppProvider";
-import { detectFod } from "@/lib/api";
-import { saveInspectionBatch } from "@/lib/inspection-store";
-import { parseDefectsFromResponse } from "@/lib/defect-parser";
+import { detectFod, listDesignSpecs, getInspectionPrompt } from "@/lib/api";
+import {
+    saveInspectionPlaceholder,
+    updateInspectionProgress,
+    updateInspectionWithResult,
+} from "@/lib/inspection-store";
+import { parseDefectsFromResponse, normalizeSeverityToDefect } from "@/lib/defect-parser";
+import DesignSpecPreview from "@/components/DesignSpecPreview";
+import { Alert } from "@/components/ui/alert";
+import { DesignSpecLink, type PreviewSpec } from "@/components/DesignSpecLink";
 
 export default function InspectPage() {
     const router = useRouter();
-    const { currentProject } = useApp();
+    const { user, currentProject, hasRestoredFromStorage, setCurrentProject } = useApp();
 
-    // Inspect requires a project - redirect to select one if missing
     useEffect(() => {
-        if (!currentProject) {
+        if (!hasRestoredFromStorage) return;
+        if (!user) {
+            router.replace("/login");
+            return;
+        }
+        if (!currentProject?.id) {
             router.replace("/projects");
         }
-    }, [currentProject, router]);
+    }, [hasRestoredFromStorage, user, currentProject, router]);
+
+    /** Track mount so we don't setState after navigate-away; analysis still completes in background. */
+    const isMountedRef = useRef(true);
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    // Fetch design specs if project has none (e.g. from persisted state or Switch project)
+    useEffect(() => {
+        if (!currentProject?.id || (currentProject.designSpecs?.length ?? 0) > 0) return;
+        const projectId = currentProject.id;
+        listDesignSpecs(projectId)
+            .then((specs) => {
+                if (specs.length > 0) {
+                    setCurrentProject({ ...currentProject, designSpecs: specs });
+                }
+            })
+            .catch(() => {});
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- only refetch when project id changes
+    }, [currentProject?.id]);
+    const [previewSpec, setPreviewSpec] = useState<PreviewSpec>(null);
     const [productPhotos, setProductPhotos] = useState<File[]>([]);
     const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [analysisProgress, setAnalysisProgress] = useState(0);
+    const [startedMessage, setStartedMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [promptPopupOpen, setPromptPopupOpen] = useState(false);
+    const [promptContent, setPromptContent] = useState("");
+    const [promptLoading, setPromptLoading] = useState(false);
+    const [promptError, setPromptError] = useState<string | null>(null);
 
-    const handleProductPhotoUpload = useCallback(
-        (e: React.ChangeEvent<HTMLInputElement>) => {
-            const files = e.target.files;
-            setError(null);
-            if (files && files.length > 0) {
-                const newFiles = Array.from(files).filter((f) =>
-                    f.type.startsWith("image/")
-                );
-                const newUrls = newFiles.map((f) => URL.createObjectURL(f));
-                setProductPhotos((prev) => [...prev, ...newFiles]);
-                setPreviewUrls((prev) => [...prev, ...newUrls]);
-            }
-            e.target.value = "";
-        },
-        []
-    );
+    const handleProductPhotoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        setError(null);
+        if (files && files.length > 0) {
+            const newFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+            const newUrls = newFiles.map((f) => URL.createObjectURL(f));
+            setProductPhotos((prev) => [...prev, ...newFiles]);
+            setPreviewUrls((prev) => [...prev, ...newUrls]);
+        }
+        e.target.value = "";
+    }, []);
 
     const removeProductPhoto = useCallback((index: number) => {
         setProductPhotos((prev) => prev.filter((_, i) => i !== index));
@@ -83,281 +117,401 @@ MAJOR ISSUES:
 
 RECOMMENDATION: Product does not meet manufacturing specifications. Immediate rework required.`;
 
+    /** Convert File to base64 data URL so it persists across refresh/navigation (blob URLs break) */
+    const fileToDataUrl = useCallback((file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }, []);
+
     const handleRunInspection = async () => {
         if (productPhotos.length === 0) return;
-        setIsAnalyzing(true);
         setError(null);
-        setAnalysisProgress(0);
+        setStartedMessage(null);
 
         const designSpecs = currentProject?.designSpecs ?? [];
-        const submissions: Array<{
-            timestamp: string;
-            productPhoto: string;
-            photoName: string;
-            designSpec: string[];
-            status: "pass" | "fail";
-            defects: ReturnType<typeof parseDefectsFromResponse>;
-            analysis: string;
-            model?: string;
-            inferenceTimeMs?: number;
-        }> = [];
-
         const total = productPhotos.length;
-        let processed = 0;
+        const filesToAnalyze = [...productPhotos];
 
-        for (let i = 0; i < productPhotos.length; i++) {
-            const file = productPhotos[i];
-            const imageUrl = previewUrls[i] ?? URL.createObjectURL(file);
-
-            try {
-                const result = await detectFod(file);
-                const defects = parseDefectsFromResponse(result.response);
-                const status =
-                    defects.some((d) => d.severity === "critical") ||
-                    result.response.toLowerCase().includes("fail")
-                        ? "fail"
-                        : "pass";
-
-                submissions.push({
-                    timestamp: new Date().toISOString(),
-                    productPhoto: imageUrl,
-                    photoName: file.name,
-                    designSpec: designSpecs,
-                    status,
-                    defects,
-                    analysis: result.response,
-                    model: result.model,
-                    inferenceTimeMs: result.inference_time_ms,
-                });
-            } catch {
-                const defects = parseDefectsFromResponse(MOCK_RESPONSE);
-                submissions.push({
-                    timestamp: new Date().toISOString(),
-                    productPhoto: imageUrl,
-                    photoName: file.name,
-                    designSpec: designSpecs,
-                    status: "fail",
-                    defects,
-                    analysis: MOCK_RESPONSE,
-                    model: "mock (offline)",
-                    inferenceTimeMs: 0,
-                });
-            }
-
-            processed++;
-            setAnalysisProgress(Math.round((processed / total) * 100));
+        // Build data URLs for placeholder thumbnails
+        const placeholderSubs: Array<{ productPhoto: string; photoName: string }> = [];
+        for (const file of productPhotos) {
+            const dataUrl = await fileToDataUrl(file);
+            placeholderSubs.push({ productPhoto: dataUrl, photoName: file.name });
         }
 
-        saveInspectionBatch({
-            submissions,
+        const placeholderId = saveInspectionPlaceholder({
             projectId: currentProject?.id,
             projectName: currentProject?.name,
             designSpecs,
+            submissions: placeholderSubs,
         });
 
-        setIsAnalyzing(false);
+        // Show placeholder in history immediately; clear form so user can start another
+        setStartedMessage(`Analysis started. View progress in History.`);
+        previewUrls.forEach((u) => URL.revokeObjectURL(u));
         setProductPhotos([]);
-        // Do NOT revoke blob URLs - they're stored in the batch and needed for display
         setPreviewUrls([]);
 
-        // Stay on dashboard - do NOT navigate. History sidebar will update.
+        // Run analysis in background
+        const runBackground = async () => {
+            const submissions: Array<{
+                timestamp: string;
+                productPhoto: string;
+                photoName: string;
+                designSpec: string[];
+                status: "pass" | "fail";
+                defects: ReturnType<typeof parseDefectsFromResponse>;
+                analysis: string;
+                model?: string;
+                inferenceTimeMs?: number;
+            }> = [];
+
+            for (let i = 0; i < filesToAnalyze.length; i++) {
+                const file = filesToAnalyze[i];
+                const productPhoto = placeholderSubs[i]?.productPhoto ?? (await fileToDataUrl(file));
+
+                try {
+                    const result = await detectFod(file, currentProject?.id);
+                    const defects =
+                        result.defects && result.defects.length > 0
+                            ? result.defects.map((d) => ({
+                                  id: d.id,
+                                  severity: normalizeSeverityToDefect(d.severity),
+                                  description: d.description,
+                              }))
+                            : parseDefectsFromResponse(result.response);
+                    const status: "pass" | "fail" =
+                        result.pass_fail ??
+                        (defects.some((d) => d.severity === "critical") ||
+                        result.response.toLowerCase().includes("fail")
+                            ? "fail"
+                            : "pass");
+
+                    submissions.push({
+                        timestamp: new Date().toISOString(),
+                        productPhoto,
+                        photoName: file.name,
+                        designSpec: designSpecs,
+                        status,
+                        defects,
+                        analysis: result.response,
+                        model: result.model,
+                        inferenceTimeMs: result.inference_time_ms,
+                    });
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : "Detection failed";
+                    if (isMountedRef.current) setError(`Image "${file.name}": ${msg}. Using mock data.`);
+                    const defects = parseDefectsFromResponse(MOCK_RESPONSE);
+                    submissions.push({
+                        timestamp: new Date().toISOString(),
+                        productPhoto,
+                        photoName: file.name,
+                        designSpec: designSpecs,
+                        status: "fail",
+                        defects,
+                        analysis: MOCK_RESPONSE,
+                        model: "mock (offline)",
+                        inferenceTimeMs: 0,
+                    });
+                }
+
+                const processed = submissions.length;
+                if (isMountedRef.current) {
+                    const pct = Math.round((processed / total) * 100);
+                    updateInspectionProgress(placeholderId, pct);
+                }
+            }
+
+            const first = submissions[0];
+            if (!first) return;
+            updateInspectionWithResult(placeholderId, {
+                imageUrl: first.productPhoto,
+                response: first.analysis,
+                model: first.model,
+                inferenceTimeMs: first.inferenceTimeMs,
+                timestamp: first.timestamp,
+                projectId: currentProject?.id,
+                projectName: currentProject?.name,
+                submissions: submissions.map((s, idx) => ({
+                    ...s,
+                    id: `${placeholderId}-sub-${idx}`,
+                })),
+            });
+            if (isMountedRef.current) {
+                setStartedMessage(null);
+                setError(null);
+            }
+        };
+
+        void runBackground();
     };
 
     const designSpecs = currentProject?.designSpecs ?? [];
 
+    const handleOpenPromptPopup = useCallback(() => {
+        setPromptPopupOpen(true);
+        setPromptError(null);
+        setPromptContent("");
+        setPromptLoading(true);
+        getInspectionPrompt(currentProject?.id ?? null)
+            .then((r) => {
+                setPromptContent(r.prompt);
+                setPromptLoading(false);
+            })
+            .catch((e) => {
+                setPromptError(e instanceof Error ? e.message : "Failed to load prompt");
+                setPromptLoading(false);
+            });
+    }, [currentProject?.id]);
+
     return (
         <div className="flex-1 flex flex-col bg-slate-50 dark:bg-zinc-950 transition-colors overflow-hidden">
-                <div className="max-w-[700px] w-full mx-auto flex-1 flex flex-col py-6">
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                        New Inspection
-                    </h1>
-                    <p className="text-slate-600 dark:text-zinc-400 mb-6">
-                        Upload product photos for analysis against project
-                        specifications
-                    </p>
+            <div className="max-w-[700px] w-full mx-auto flex-1 flex flex-col py-6">
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+                    New Inspection
+                </h1>
+                <p className="text-slate-600 dark:text-zinc-400 mb-6">
+                    Upload product photos for analysis against project specifications
+                </p>
 
-                    {/* Design Specifications Info */}
-                    {currentProject && designSpecs.length > 0 && (
-                        <div className="mb-8 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-xl p-4">
-                            <div className="flex items-start gap-3">
-                                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                                        Design Specifications
-                                    </p>
-                                    <div className="space-y-1">
-                                        {designSpecs.map((spec, index) => (
-                                            <p
-                                                key={index}
-                                                className="text-sm text-blue-700 dark:text-blue-300 truncate"
-                                            >
-                                                • {spec}
-                                            </p>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Upload Product Photos */}
-                    <div>
-                        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-                            Upload Product Photos
-                        </h3>
-
-                        {productPhotos.length === 0 ? (
-                            <div
-                                onDrop={(e) => {
-                                    e.preventDefault();
-                                    const files = Array.from(
-                                        e.dataTransfer.files
-                                    ).filter((f) => f.type.startsWith("image/"));
-                                    if (files.length > 0) {
-                                        setError(null);
-                                        setProductPhotos((p) => [...p, ...files]);
-                                        setPreviewUrls((p) => [
-                                            ...p,
-                                            ...files.map((f) =>
-                                                URL.createObjectURL(f)
-                                            ),
-                                        ]);
-                                    }
-                                }}
-                                onDragOver={(e) => {
-                                    e.preventDefault();
-                                    e.dataTransfer.dropEffect = "copy";
-                                }}
-                                className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-xl p-12 text-center bg-white dark:bg-zinc-900/50 hover:border-blue-400 dark:hover:border-blue-600 transition-colors"
-                            >
-                                <input
-                                    type="file"
-                                    id="product-photo"
-                                    onChange={handleProductPhotoUpload}
-                                    accept="image/*"
-                                    className="hidden"
-                                    multiple
-                                />
-                                <label
-                                    htmlFor="product-photo"
-                                    className="cursor-pointer block"
-                                >
-                                    <Image className="w-12 h-12 text-slate-400 dark:text-zinc-600 mx-auto mb-4" />
-                                    <p className="text-slate-900 dark:text-white mb-1">
-                                        Drop Product Photos here or{" "}
-                                        <span className="text-blue-600 dark:text-blue-400 font-medium">
-                                            browse
-                                        </span>
-                                    </p>
-                                    <p className="text-sm text-slate-500 dark:text-zinc-500">
-                                        PNG, JPG, JPEG, WebP • Multiple images
-                                        supported
-                                    </p>
-                                </label>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <div className="grid grid-cols-3 gap-3 p-3 bg-slate-100 dark:bg-zinc-800 rounded-xl border-2 border-slate-200 dark:border-zinc-700">
-                                    {productPhotos.map((photo, index) => (
-                                        <div
-                                            key={index}
-                                            className="relative group/photo"
-                                        >
-                                            <img
-                                                src={previewUrls[index] ?? ""}
-                                                alt={photo.name}
-                                                className="w-full h-auto rounded-lg object-cover aspect-square"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    removeProductPhoto(index)
-                                                }
-                                                disabled={isAnalyzing}
-                                                className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-lg opacity-0 group-hover/photo:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50"
-                                                title="Remove"
-                                            >
-                                                <X className="w-4 h-4" />
-                                            </button>
-                                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 rounded-b-lg truncate">
-                                                {photo.name}
-                                            </div>
-                                        </div>
+                {/* Design Specifications Info */}
+                {currentProject && designSpecs.length > 0 && (
+                    <div className="mb-8 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-xl p-4">
+                        <div className="flex items-start gap-3">
+                            <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                                    Design Specifications
+                                </p>
+                                <div className="space-y-1">
+                                    {designSpecs.map((spec) => (
+                                        <DesignSpecLink
+                                            key={spec}
+                                            spec={spec}
+                                            onPreview={() =>
+                                                currentProject &&
+                                                setPreviewSpec({
+                                                    projectId: currentProject.id,
+                                                    filename: spec,
+                                                })
+                                            }
+                                            className="text-sm text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 hover:underline transition-colors gap-1.5"
+                                            leading="• "
+                                        />
                                     ))}
                                 </div>
-                                <div className="flex gap-2">
-                                    <label
-                                        htmlFor="product-photo-add"
-                                        className="flex-1 bg-slate-200 dark:bg-zinc-700 hover:bg-slate-300 dark:hover:bg-zinc-600 text-slate-900 dark:text-white px-4 py-2 rounded-lg font-medium cursor-pointer transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Add More Photos
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={clearAllPhotos}
-                                        disabled={isAnalyzing}
-                                        className="bg-red-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
-                                    >
-                                        Clear All
-                                    </button>
-                                </div>
-                                <input
-                                    type="file"
-                                    id="product-photo-add"
-                                    onChange={handleProductPhotoUpload}
-                                    accept="image/*"
-                                    className="hidden"
-                                    multiple
-                                />
                             </div>
-                        )}
-                    </div>
-
-                    {error && (
-                        <div className="mt-4 flex items-center gap-2 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300">
-                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                            <p className="text-sm">{error}</p>
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {/* Start Analysis Button */}
+                {/* View inspection prompt (PDF + generic) */}
+                <div className="mb-6">
                     <button
                         type="button"
-                        onClick={handleRunInspection}
-                        disabled={
-                            productPhotos.length === 0 || isAnalyzing
-                        }
-                        className={`w-full font-semibold py-4 px-6 rounded-xl transition-all disabled:cursor-not-allowed shadow-sm mt-8 ${
-                            productPhotos.length && !isAnalyzing
-                                ? "bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 hover:dark:bg-blue-600 text-white"
-                                : "bg-slate-300 dark:bg-zinc-800 text-slate-500 dark:text-zinc-600"
-                        }`}
+                        onClick={handleOpenPromptPopup}
+                        className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 hover:underline font-medium flex items-center gap-1.5"
                     >
-                        {isAnalyzing ? (
-                            <span className="flex flex-col items-center gap-2">
-                                <span className="flex items-center gap-3">
-                                    <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                                    Analyzing {productPhotos.length} Product
-                                    {productPhotos.length > 1 ? "s" : ""}...
-                                </span>
-                                <div className="w-full bg-slate-400 dark:bg-zinc-700 rounded-full h-2 overflow-hidden">
-                                    <div
-                                        className="bg-white h-full transition-all duration-300"
-                                        style={{
-                                            width: `${analysisProgress}%`,
-                                        }}
-                                    />
-                                </div>
-                                <span className="text-sm">
-                                    {analysisProgress}%
-                                </span>
-                            </span>
-                        ) : (
-                            "Start Analysis"
-                        )}
+                        <FileDiff className="w-4 h-4" />
+                        View inspection prompt (PDF + generic)
                     </button>
-
                 </div>
+
+                {previewSpec && (
+                    <DesignSpecPreview
+                        projectId={previewSpec.projectId}
+                        filename={previewSpec.filename}
+                        onClose={() => setPreviewSpec(null)}
+                    />
+                )}
+
+                {/* Inspection prompt popup */}
+                {promptPopupOpen && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+                        onClick={(e) => {
+                            if (e.target === e.currentTarget) setPromptPopupOpen(false);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Escape") setPromptPopupOpen(false);
+                        }}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Inspection prompt"
+                    >
+                        <div
+                            className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col border border-slate-200 dark:border-zinc-700"
+                        >
+                            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-zinc-700">
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                                    Inspection prompt (PDF + generic)
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => setPromptPopupOpen(false)}
+                                    className="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                                    aria-label="Close"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-4 overflow-auto flex-1 min-h-0">
+                                {promptLoading && (
+                                    <p className="text-slate-500 dark:text-zinc-400">Loading prompt…</p>
+                                )}
+                                {promptError && (
+                                    <Alert variant="error">{promptError}</Alert>
+                                )}
+                                {!promptLoading && !promptError && promptContent && (
+                                    <pre className="text-sm text-slate-700 dark:text-zinc-300 whitespace-pre-wrap font-sans break-words">
+                                        {promptContent}
+                                    </pre>
+                                )}
+                            </div>
+                            <div className="p-4 border-t border-slate-200 dark:border-zinc-700">
+                                <button
+                                    type="button"
+                                    onClick={() => setPromptPopupOpen(false)}
+                                    className="w-full py-2 px-4 rounded-lg bg-slate-200 dark:bg-zinc-700 text-slate-900 dark:text-white font-medium hover:bg-slate-300 dark:hover:bg-zinc-600 transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Upload Product Photos */}
+                <div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
+                        Upload Product Photos
+                    </h3>
+
+                    {productPhotos.length === 0 ? (
+                        <div
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                const files = Array.from(e.dataTransfer.files).filter((f) =>
+                                    f.type.startsWith("image/"),
+                                );
+                                if (files.length > 0) {
+                                    setError(null);
+                                    setProductPhotos((p) => [...p, ...files]);
+                                    setPreviewUrls((p) => [
+                                        ...p,
+                                        ...files.map((f) => URL.createObjectURL(f)),
+                                    ]);
+                                }
+                            }}
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = "copy";
+                            }}
+                            className="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-xl p-12 text-center bg-white dark:bg-zinc-900/50 hover:border-blue-400 dark:hover:border-blue-600 transition-colors"
+                        >
+                            <input
+                                type="file"
+                                id="product-photo"
+                                onChange={handleProductPhotoUpload}
+                                accept="image/*"
+                                className="hidden"
+                                multiple
+                            />
+                            <label htmlFor="product-photo" className="cursor-pointer block">
+                                <Image className="w-12 h-12 text-slate-400 dark:text-zinc-600 mx-auto mb-4" />
+                                <p className="text-slate-900 dark:text-white mb-1">
+                                    Drop Product Photos here or{" "}
+                                    <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                        browse
+                                    </span>
+                                </p>
+                                <p className="text-sm text-slate-500 dark:text-zinc-500">
+                                    PNG, JPG, JPEG, WebP • Multiple images supported
+                                </p>
+                            </label>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-3 gap-3 p-3 bg-slate-100 dark:bg-zinc-800 rounded-xl border-2 border-slate-200 dark:border-zinc-700">
+                                {productPhotos.map((photo, index) => (
+                                    <div key={`${photo.name}-${photo.size}-${photo.lastModified}`} className="relative group/photo">
+                                        <img
+                                            src={previewUrls[index] ?? ""}
+                                            alt={photo.name}
+                                            className="w-full h-auto rounded-lg object-cover aspect-square"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => removeProductPhoto(index)}
+                                            disabled={productPhotos.length === 0}
+                                            className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-lg opacity-0 group-hover/photo:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50"
+                                            title="Remove"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 rounded-b-lg truncate">
+                                            {photo.name}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex gap-2">
+                                <label
+                                    htmlFor="product-photo-add"
+                                    className="flex-1 bg-slate-200 dark:bg-zinc-700 hover:bg-slate-300 dark:hover:bg-zinc-600 text-slate-900 dark:text-white px-4 py-2 rounded-lg font-medium cursor-pointer transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Add More Photos
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={clearAllPhotos}
+                                    disabled={productPhotos.length === 0}
+                                    className="bg-red-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+                                >
+                                    Clear All
+                                </button>
+                            </div>
+                            <input
+                                type="file"
+                                id="product-photo-add"
+                                onChange={handleProductPhotoUpload}
+                                accept="image/*"
+                                className="hidden"
+                                multiple
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {error && (
+                    <Alert variant="error" className="mt-4">
+                        {error}
+                    </Alert>
+                )}
+
+                {/* Start Analysis Button */}
+                {startedMessage && (
+                    <div className="mt-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-800 dark:text-blue-200 text-sm">
+                        {startedMessage}
+                    </div>
+                )}
+                <button
+                    type="button"
+                    onClick={handleRunInspection}
+                    disabled={productPhotos.length === 0}
+                    className={`w-full font-semibold py-4 px-6 rounded-xl transition-all disabled:cursor-not-allowed shadow-sm mt-8 ${
+                        productPhotos.length
+                            ? "bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 hover:dark:bg-blue-600 text-white"
+                            : "bg-slate-300 dark:bg-zinc-800 text-slate-500 dark:text-zinc-600"
+                    }`}
+                >
+                    Start Analysis
+                </button>
+            </div>
         </div>
     );
 }

@@ -4,99 +4,76 @@ CSCI 577A Spring 2026 Group Project
 
 Foreign Object Debris (FOD) detection using Vision Language Models.
 
-## Getting Started
+---
 
-### For Code Quality Metrics
+## Run the app locally (one command)
 
-SonarQube: https://sonarcloud.io/project/overview?id=Aperture-Labs-SP-26_Aperture-Labs-Project
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/), Python 3.12 or 3.13, Node.js (e.g. 22.x), `pip`, `npm`.
 
-### Backend Setup
-
-#### 1. Install Ollama
-
-Download from https://ollama.com
-
-#### 2. Pull the model and start server
+From the project root:
 
 ```bash
-ollama pull qwen2.5vl:7b
-ollama serve
+make run
 ```
 
-#### 3. Setup backend (first time only)
+Or directly:
 
 ```bash
-cd backend
-setup.bat
+chmod +x run.sh && ./run.sh
 ```
 
-#### 4. Run the server
+**Stop everything:** `make kill` — stops backend, frontend, Ollama, and Docker (keeps DB).  
+**Stop everything + reset DB:** `make kill-reset` — same as above and removes Docker volumes (fresh DB on next `make run`).
 
-```bash
-cd backend
-run.bat
-```
+This will:
 
-### Frontend Setup
+1. Start Postgres and MinIO with `docker compose up -d`
+2. Create `backend/.env` from defaults if missing (ports 5434, 9002)
+3. Create a Python venv and install backend deps, then start the API at **http://127.0.0.1:8000**
+4. Run `npm install` if needed and start the frontend at **http://localhost:3998**
 
-#### 1. Install Node.js
+**Log in:** `test@example.com` / `test`  
+(Seed users: alice/bob/carol use password `password123`, test@example.com uses `test`. Passwords are stored in plain text; do not commit `backend/.env`—use `.env.example` for documentation.)
 
-Ensure you have Node.js 22.13.0 (LTS). Use nvm to install or switch versions; run `nvm use` from the frontend directory.
+Press **Ctrl+C** to stop the backend and frontend; Docker keeps running. To stop Docker: `make dev-down` or `docker compose down`.
 
-#### 2. Install packages
+**If `make run` or `./run.sh` fails** (e.g. on Windows, or a step errors), use the [step-by-step instructions](#step-by-step-if-one-command-doesnt-work) below.
 
-```bash
-cd frontend
-npm install
-```
-
-#### 3. Run the development server
-```bash
-npm run dev
-```
-
-Open [http://localhost:3998](http://localhost:3998) with your browser to see the result.
-
-See [frontend/README.md](frontend/README.md) for more details.
-
-## API
-
-Can use Swagger UI: http://localhost:8000/docs
-
-## Spin Up Databases and Run API Server
-
-## Prerequisites
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- Python 3.12 or 3.13 (3.14 may cause dependency issues with some packages)
-- `pip` and `venv`
+**Login shows "Cannot reach the backend" or connection timeout?** The frontend calls `http://localhost:8000`. Start the full app with `make run` (starts Docker + backend + frontend), or start the backend first in one terminal (`cd backend && source venv/bin/activate && uvicorn main:app --reload --host 127.0.0.1 --port 8000`) then the frontend in another.
 
 ---
 
-## 1. Environment Setup
+## Optional: Ollama (real VLM detection)
 
-Copy the example environment file and fill in your values:
+For live FOD detection instead of mock results, install [Ollama](https://ollama.com).
+
+`./run.sh` (and `make run`) will automatically start Ollama and pull `qwen2.5vl:7b` if Ollama is installed. If it's not installed, the app falls back to mock detection responses.
+
+---
+
+## Step-by-step (if one command doesn't work)
+
+Use these steps if `make run` fails or you're on Windows (where `run.sh` is not supported). Run each step in order; use **two terminals** for backend and frontend.
+
+### 1. Environment
+
+Ensure `backend/.env` exists. If not, copy from example or create with:
 
 ```bash
-cp backend/.env.example backend/.env
-```
-
-Your `backend/.env` should contain:
-
-```
-DATABASE_URL=postgresql://user:pass@localhost:5432/appdb
-SECRET_KEY=your-secret-key-here
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-MINIO_ENDPOINT=localhost:9000
+# backend/.env (do not commit; use .env.example for docs)
+DATABASE_URL=postgresql://user:pass@127.0.0.1:5434/appdb
+MINIO_ENDPOINT=localhost:9002
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET_DESIGNS=designs
+MINIO_BUCKET_IMAGES=images
 MINIO_USE_SSL=false
-DETECTION_WEBHOOK_SECRET=your-webhook-secret-here
+DETECTION_WEBHOOK_SECRET=dev-webhook-secret
 ```
 
----
+(Ports 5434 and 9002 match `docker-compose.yml`.)
 
-## 2. Start Docker Services
+### 2. Docker
 
 From the project root, start Postgres and MinIO:
 
@@ -104,60 +81,74 @@ From the project root, start Postgres and MinIO:
 docker compose up -d
 ```
 
-To verify both containers are running:
+Optional: wait a few seconds, then check containers are up: `docker ps`.
+
+### 3. Backend
+
+In a **first terminal**, from the project root:
 
 ```bash
-docker ps
+cd backend
+python3 -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-You should see two containers — one for `postgres` and one for `minio`.
+Leave this terminal running. Then check:
 
-To watch the initialization logs and confirm the schema and seed data loaded correctly:
+- API: http://127.0.0.1:8000
+- Swagger: http://127.0.0.1:8000/docs
+
+### 4. Frontend (second terminal)
+
+Open a **new terminal**, from the project root:
 
 ```bash
-docker logs aperture-labs-project-postgres-1 --follow
+cd frontend
+npm install
+npm run dev
 ```
 
-You should see references to `schema.sql` and `seed.sql` being processed with no errors. Press `Ctrl+C` to stop following logs.
+- App: http://localhost:3998
+- Log in with: `test@example.com` / `test`
 
 ---
 
-## 3. Start the API
+## Code quality
 
-From the `backend/` directory with your virtual environment active:
+SonarQube: https://sonarcloud.io/project/overview?id=Aperture-Labs-SP-26_Aperture-Labs-Project
+
+---
+
+## Running tests
+
+From the project root:
 
 ```bash
-uvicorn main:app --reload
-```
-
-The API will be available at:
-
-- **API:** `http://127.0.0.1:8000`
-- **Swagger docs:** `http://127.0.0.1:8000/docs`
-- **MinIO console:** `http://localhost:9001` (login: `minioadmin` / `minioadmin`)
-
-## Running Tests
-
-Run the full suite (from root directory of the project):
-```bash
-make test
-```
-
-Run by type:
-```bash
+make test        # full suite
 make test-unit   # unit tests only
-make test-api    # api tests only
 ```
 
-Run a specific file or test directly:
+Or from `backend/` with venv active:
+
 ```bash
-cd backend && pytest tests/unit/services/test_auth_service.py -v
-cd backend && pytest tests/unit/services/test_auth_service.py::test_login_returns_success -v -s
+pytest
+pytest tests/unit/services/test_auth_service.py -v
 ```
+
+---
 
 ## Teardown
 
-Stop the test database when done:
-```bash
-make test-down
-```
+- **Stop backend/frontend:** Ctrl+C (if you used `./run.sh`).
+- **Stop everything:** `make kill` — stops backend (8000), frontend (3998), Ollama (11434), and Docker.
+- **Stop everything + reset DB:** `make kill-reset` — same as above and removes Docker volumes (fresh DB on next `make run`).
+- **Docker only:** `make dev-down` or `docker compose down`.
+- **Reset DB and storage:** `docker compose down -v` then `docker compose up -d`.
+
+---
+
+## Frontend details
+
+See [frontend/README.md](frontend/README.md) for scripts, env (`NEXT_PUBLIC_API_URL`), and port (3998).

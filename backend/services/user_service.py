@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from core import exceptions, security
 from db.models import User
 from schemas.users import UserCreate, UserUpdate
+from core import exceptions
+from utils.password import hash_password
 
 
 def create_user(db: Session, payload: UserCreate) -> User:

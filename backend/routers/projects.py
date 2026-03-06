@@ -1,7 +1,7 @@
 from uuid import UUID
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from core import exceptions
@@ -33,7 +33,6 @@ router = APIRouter(
 def create_project(
     payload: ProjectCreate,
     db: Session = Depends(get_db),
-    # 
 ):
     return project_service.create_project(
         db=db,
@@ -48,7 +47,6 @@ def create_project(
 def list_projects(
     include_archived: bool = False,
     db: Session = Depends(get_db),
-    
 ):
     return project_service.list_projects_for_user(
         db=db,
@@ -64,16 +62,10 @@ def get_project(
     project_id: UUID,
     db: Session = Depends(get_db),
 ):
-    try:
-        return project_service.get_project(
-            db=db,
-            project_id=project_id,
-        )
-    except exceptions.ProjectNotFound:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
+    return project_service.get_project(
+        db=db,
+        project_id=project_id,
+    )
 
 
 # -------------------------
@@ -84,24 +76,12 @@ def update_project(
     project_id: UUID,
     payload: ProjectUpdate,
     db: Session = Depends(get_db),
-    
 ):
-    try:
-        return project_service.update_project(
-            db=db,
-            project_id=project_id,
-            payload=payload,
-        )
-    except exceptions.ProjectNotFound:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-    except exceptions.PermissionDenied:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions to update this project",
-        )
+    return project_service.update_project(
+        db=db,
+        project_id=project_id,
+        payload=payload,
+    )
 
 
 # -------------------------
@@ -111,23 +91,11 @@ def update_project(
 def delete_project(
     project_id: UUID,
     db: Session = Depends(get_db),
-    
 ):
-    try:
-        project_service.delete_project(
-            db=db,
-            project_id=project_id,
-        )
-    except exceptions.ProjectNotFound:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-    except exceptions.PermissionDenied:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the owner can delete this project",
-        )
+    project_service.delete_project(
+        db=db,
+        project_id=project_id,
+    )
 
 
 # -------------------------
@@ -137,23 +105,11 @@ def delete_project(
 def archive_project(
     project_id: UUID,
     db: Session = Depends(get_db),
-    
 ):
-    try:
-        return project_service.archive_project(
-            db=db,
-            project_id=project_id,
-        )
-    except exceptions.ProjectNotFound:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
-        )
-    except exceptions.PermissionDenied:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the owner can archive this project",
-        )
+    return project_service.archive_project(
+        db=db,
+        project_id=project_id,
+    )
 
 
 # # -------------------------

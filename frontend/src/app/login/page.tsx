@@ -8,29 +8,56 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, User, Activity, Moon, Sun } from "lucide-react";
 import { useApp } from "@/app/AppProvider";
+import { login, API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormField, FormItem, FormLabel } from "@/components/ui/form";
 
 export default function LoginPage() {
     const router = useRouter();
-    const { theme, setCurrentProject, toggleTheme } = useApp();
-    const [username, setUsername] = useState("");
+    const { theme, setCurrentProject, setUser, toggleTheme } = useApp();
+    const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
 
-    // Ensure there's no selected project while on the login page.
     useEffect(() => {
         setCurrentProject(null);
     }, [setCurrentProject]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // TODO: Replace with actual authentication API call
-        // Mock authentication - in production, this would validate credentials
-        if (username && password) {
-            // Navigate to projects page after successful login
-            router.push("/projects");
+        setError(null);
+        if (!email.trim() || !password) return;
+        setIsLoading(true);
+        try {
+            const res = await login({ email: email.trim(), password });
+            if (res.success && res.user) {
+                setUser({ id: res.user.id, email: res.user.email });
+                router.push("/projects");
+            } else {
+                setError(res.message ?? "Login failed");
+            }
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Login failed";
+            const isNetworkError =
+                message === "Failed to fetch" ||
+                message.includes("NetworkError") ||
+                message.includes("Connection") ||
+                message.includes("timeout") ||
+                message.includes("Load failed");
+            if (isNetworkError) {
+                setError(
+                    "Cannot reach the backend. Start the API first (e.g. make run from project root, or run backend then frontend). Expected: " +
+                        API_BASE_URL,
+                );
+            } else {
+                setError(message);
+            }
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -66,16 +93,16 @@ export default function LoginPage() {
                         <Form onSubmit={handleSubmit}>
                             <FormField>
                                 <FormItem>
-                                    <FormLabel htmlFor="username">Username</FormLabel>
+                                    <FormLabel htmlFor="email">Email</FormLabel>
                                     <div className="relative">
                                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
                                         <Input
-                                            type="text"
-                                            id="username"
-                                            value={username}
-                                            onChange={(e) => setUsername(e.target.value)}
+                                            type="email"
+                                            id="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
                                             className="pl-10"
-                                            placeholder="Enter username"
+                                            placeholder="Enter email"
                                             required
                                         />
                                     </div>
@@ -100,15 +127,20 @@ export default function LoginPage() {
                                 </FormItem>
                             </FormField>
 
-                            <Button type="submit" className="w-full">
-                                Sign In
+                            {error && (
+                                <Alert variant="error" className="mb-4">
+                                    {error}
+                                </Alert>
+                            )}
+                            <Button type="submit" className="w-full" disabled={isLoading}>
+                                {isLoading ? "Signing in..." : "Sign In"}
                             </Button>
                         </Form>
                     </CardContent>
                     <CardFooter className="flex-col">
                         <div className="w-full pt-4 border-t border-border">
                             <p className="text-xs text-muted-foreground text-center">
-                                Demo credentials: Any username and password
+                                Demo: <code>test@example.com</code> / <code>test</code>
                             </p>
                         </div>
                     </CardFooter>

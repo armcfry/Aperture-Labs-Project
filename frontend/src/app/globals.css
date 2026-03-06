@@ -47,14 +47,24 @@
     --shadow-spread: 0px;
     --shadow-opacity: 0.15;
     --shadow-color: oklch(0.2571 0.1161 272.24);
-    --shadow-2xs: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.07);
-    --shadow-xs: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.07);
-    --shadow-sm: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 1px 2px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 1px 2px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow-md: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 2px 4px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow-lg: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 4px 6px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow-xl: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 8px 10px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow-2xl: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.38);
+    --shadow-2xs: 0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.07);
+    --shadow-xs: 0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.07);
+    --shadow-sm:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 1px 2px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 1px 2px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow-md:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 2px 4px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow-lg:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 4px 6px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow-xl:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 8px 10px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow-2xl: 0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.38);
     --tracking-normal: 0em;
     --spacing: 0.25rem;
 }
@@ -102,14 +112,24 @@
     --shadow-spread: 0px;
     --shadow-opacity: 0.15;
     --shadow-color: oklch(0.2571 0.1161 272.24);
-    --shadow-2xs: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.07);
-    --shadow-xs: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.07);
-    --shadow-sm: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 1px 2px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 1px 2px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow-md: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 2px 4px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow-lg: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 4px 6px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow-xl: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.15), 0.25px 8px 10px -1px hsl(236.5829 64.2250% 21.4383% / 0.15);
-    --shadow-2xl: 0.25px 1px 3px 0px hsl(236.5829 64.2250% 21.4383% / 0.38);
+    --shadow-2xs: 0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.07);
+    --shadow-xs: 0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.07);
+    --shadow-sm:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 1px 2px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 1px 2px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow-md:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 2px 4px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow-lg:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 4px 6px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow-xl:
+        0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.15),
+        0.25px 8px 10px -1px hsl(236.5829 64.225% 21.4383% / 0.15);
+    --shadow-2xl: 0.25px 1px 3px 0px hsl(236.5829 64.225% 21.4383% / 0.38);
 }
 
 @theme inline {
@@ -170,7 +190,154 @@
         @apply border-border outline-ring/50;
     }
 
+    /* Pointer cursor for clickable elements */
+    button,
+    a[href],
+    [role="button"],
+    [type="button"],
+    [type="submit"],
+    [type="reset"] {
+        cursor: pointer;
+    }
+
     body {
         @apply bg-background text-foreground;
+    }
+}
+
+/* Print styles: hide nav, remove scroll/height constraints, show full report */
+@media print {
+    html,
+    body {
+        height: auto !important;
+        overflow: visible !important;
+        background: white !important;
+        color: black !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    * {
+        overflow: visible !important;
+        max-height: none !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Constrain report to page width so nothing is cut off */
+    body > *,
+    main,
+    main > div {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    /* Force long text to wrap inside the page */
+    p,
+    pre,
+    span,
+    li {
+        overflow-wrap: break-word !important;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        max-width: 100% !important;
+    }
+
+    [style*="padding-top"] {
+        padding-top: 0 !important;
+    }
+
+    [style*="height"] {
+        height: auto !important;
+    }
+
+    [style*="width: 350px"] {
+        display: none !important;
+    }
+
+    .min-h-0 {
+        min-height: auto !important;
+    }
+
+    .h-full {
+        height: auto !important;
+    }
+
+    .overflow-y-auto,
+    .overflow-hidden,
+    .overflow-x-auto {
+        overflow: visible !important;
+    }
+
+    .flex-1 {
+        flex: none !important;
+    }
+
+    main {
+        height: auto !important;
+        overflow: visible !important;
+        padding: 0 !important;
+    }
+
+    img {
+        max-width: 100% !important;
+        width: auto !important;
+        height: auto !important;
+        page-break-inside: avoid;
+    }
+
+    /* Report product images: cap height when printing so PDF layout stays intact */
+    .print-report-image {
+        max-height: 65vh !important;
+        overflow: hidden !important;
+    }
+    .print-report-image img {
+        max-height: 65vh !important;
+        width: auto !important;
+        max-width: 100% !important;
+        object-fit: contain !important;
+    }
+
+    /* Keep sections together when possible; allow break between major blocks */
+    section {
+        page-break-inside: avoid;
+    }
+
+    /* Defect cards and summary blocks: keep intact */
+    .space-y-3 > *,
+    .grid.gap-4 > * {
+        page-break-inside: avoid;
+    }
+
+    /* Report container: avoid breaking the outer card in the middle */
+    .rounded-lg.shadow-lg {
+        page-break-inside: avoid;
+        box-shadow: none !important;
+        border: 1px solid #e5e7eb !important;
+        max-width: 100% !important;
+    }
+
+    /* Footer: ensure it prints fully and doesn’t get cut off */
+    .print-report-footer {
+        page-break-before: auto;
+        page-break-inside: avoid;
+        padding: 0.75rem 1.5rem !important;
+        margin-top: 1rem;
+        max-width: 100% !important;
+    }
+
+    pre {
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        page-break-inside: avoid;
+        max-width: 100% !important;
+    }
+
+    /* Prevent tiny orphans when breaking paragraphs */
+    p {
+        orphans: 2;
+        widows: 2;
     }
 }

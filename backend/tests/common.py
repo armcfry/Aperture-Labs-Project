@@ -1,6 +1,7 @@
 import uuid
 from core.security import hash_password
 from db.models import User
+from utils.password import hash_password
 
 
 def make_user(

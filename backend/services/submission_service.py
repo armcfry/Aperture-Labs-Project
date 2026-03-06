@@ -2,9 +2,10 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from db.models import Submission, Project
+from db.models import Submission
 from schemas.submissions import SubmissionCreate, SubmissionUpdate
 from schemas.enums import SubmissionStatus, SubmissionPassFail
+from services import project_service
 from core import exceptions
 
 
@@ -13,9 +14,7 @@ def create_submission(
     project_id: uuid.UUID,
     payload: SubmissionCreate,
 ) -> Submission:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise exceptions.ProjectNotFound()
+    project_service.get_project(db, project_id)
 
     submission = Submission(
         id=uuid.uuid4(),
@@ -51,9 +50,7 @@ def list_submissions_for_project(
     status: str | None = None,
     pass_fail: str | None = None,
 ) -> list[Submission]:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise exceptions.ProjectNotFound()
+    project_service.get_project(db, project_id)
 
     query = db.query(Submission).filter(Submission.project_id == project_id)
 

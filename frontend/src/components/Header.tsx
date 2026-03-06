@@ -16,14 +16,12 @@ export default function Header() {
     const pathname = usePathname();
 
     // App context
-    const { theme, currentProject, toggleTheme, setCurrentProject, clearProjectOnLogout } = useApp();
+    const { theme, currentProject, toggleTheme, setCurrentProject, clearProjectOnLogout } =
+        useApp();
 
     const handleLogout = () => {
-        // Clear only the persisted/current project
         clearProjectOnLogout();
-        // Also clear in-memory state (defensive; clearProjectOnLogout already clears)
         setCurrentProject(null);
-        // Navigate to login page
         router.push("/login");
     };
 
@@ -38,7 +36,7 @@ export default function Header() {
 
     return (
         <header
-            className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800"
+            className="print:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800"
             style={{ height: headerHeight }}
         >
             <div className="flex w-full h-full items-center px-6">
@@ -47,9 +45,7 @@ export default function Header() {
                         <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded flex items-center justify-center">
                             <Activity className="text-white" strokeWidth={2.5} size={18} />
                         </div>
-                        <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-                            GLaDOS
-                        </h1>
+                        <h1 className="text-xl font-bold text-slate-900 dark:text-white">GLaDOS</h1>
                     </div>
 
                     {/* Project display or Select Project - hidden on /projects page */}
@@ -89,21 +85,11 @@ export default function Header() {
 
                 {/* RIGHT: actions (separate sibling, not inside left container) */}
                 <div className="w-[400px] flex-shrink-0 flex items-center justify-end gap-0">
-                    <Button
-                        onClick={toggleTheme}
-                        variant="ghost"
-                        size="icon"
-                        title="Toggle theme"
-                    >
+                    <Button onClick={toggleTheme} variant="ghost" size="icon" title="Toggle theme">
                         {theme === "dark" ? <Sun /> : <Moon />}
                     </Button>
                     {pathname !== "/login" && (
-                        <Button
-                            onClick={handleLogout}
-                            variant="ghost"
-                            size="icon"
-                            title="Logout"
-                        >
+                        <Button onClick={handleLogout} variant="ghost" size="icon" title="Logout">
                             <LogOut />
                         </Button>
                     )}

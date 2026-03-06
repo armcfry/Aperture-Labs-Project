@@ -21,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install backend dependencies
         run: |
@@ -31,7 +31,6 @@ jobs:
       - name: Run backend tests with coverage
         env:
           DATABASE_URL: "postgresql://test:test@localhost:5432/test_db"
-          SECRET_KEY: "test-secret-key-for-ci-only"
           MINIO_ENDPOINT: localhost:9000
           MINIO_ACCESS_KEY: minioadmin
           MINIO_SECRET_KEY: minioadmin
@@ -44,7 +43,7 @@ jobs:
           pytest --cov=. --cov-report=xml:coverage.xml --cov-report=term-missing
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602  # v6
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
