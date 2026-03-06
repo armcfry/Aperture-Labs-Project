@@ -6,40 +6,97 @@ Foreign Object Debris (FOD) detection using Vision Language Models.
 
 ---
 
-## Run the app locally (one command)
+## Prerequisites
 
-**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/), Python 3.12 or 3.13, Node.js (e.g. 22.x), `pip`, `npm`.
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- Python 3.12 or 3.13
+- Node.js (e.g. 22.x)
+- `pip`, `npm`
 
-From the project root:
+---
+
+## Quick Start
+
+### [Linux/macOS]
 
 ```bash
 make run
 ```
 
 Or directly:
-
 ```bash
 chmod +x run.sh && ./run.sh
 ```
 
-**Stop everything:** `make kill` — stops backend, frontend, Ollama, and Docker (keeps DB).  
-**Stop everything + reset DB:** `make kill-reset` — same as above and removes Docker volumes (fresh DB on next `make run`).
+**Stop:** Press `Ctrl+C` to stop backend/frontend. Run `make kill` to also stop Docker.
 
-This will:
+### [Windows]
 
-1. Start Postgres and MinIO with `docker compose up -d`
-2. Create `backend/.env` from defaults if missing (ports 5434, 9002)
-3. Create a Python venv and install backend deps, then start the API at **http://127.0.0.1:8000**
-4. Run `npm install` if needed and start the frontend at **http://localhost:3998**
+First, install GNU Make (one-time setup):
+```powershell
+# Run PowerShell as Administrator
+choco install make
+```
 
-**Log in:** `test@example.com` / `test`  
-(Seed users: alice/bob/carol use password `password123`, test@example.com uses `test`. Passwords are stored in plain text; do not commit `backend/.env`—use `.env.example` for documentation.)
+Then run:
+```cmd
+make run
+```
 
-Press **Ctrl+C** to stop the backend and frontend; Docker keeps running. To stop Docker: `make dev-down` or `docker compose down`.
+Or directly (no make required):
+```cmd
+.\run.bat
+```
 
-**If `make run` or `./run.sh` fails** (e.g. on Windows, or a step errors), use the [step-by-step instructions](#step-by-step-if-one-command-doesnt-work) below.
+**Stop:** Close the spawned command windows, or run `make kill` (or `.\kill.bat`).
 
-**Login shows "Cannot reach the backend" or connection timeout?** The frontend calls `http://localhost:8000`. Start the full app with `make run` (starts Docker + backend + frontend), or start the backend first in one terminal (`cd backend && source venv/bin/activate && uvicorn main:app --reload --host 127.0.0.1 --port 8000`) then the frontend in another.
+---
+
+## What `make run` does
+
+1. Starts Docker containers (Postgres + MinIO)
+2. Creates `backend/.env` if missing
+3. Sets up Python venv and installs dependencies
+4. Starts backend API at **http://127.0.0.1:8000**
+5. Starts frontend dev server at **http://localhost:3998**
+
+**Log in:** `test@example.com` / `test`
+(Other users: alice/bob/carol with password `password123`)
+
+**Stop everything:** `make kill` — stops backend, frontend, Ollama, and Docker (keeps DB).
+**Stop + reset DB:** `make kill-reset` — same as above and removes Docker volumes (fresh DB on next run).
+
+---
+
+## Troubleshooting
+
+**"make: command not found" or "make is not recognized"?**
+
+| OS | Solution |
+|----|----------|
+| **Windows** | Install make via Chocolatey: `choco install make` (run PowerShell as Admin), then restart your terminal. Or skip make and run `.\run.bat` directly. |
+| **macOS** | Install Xcode Command Line Tools: `xcode-select --install` |
+| **Linux** | Install build-essential: `sudo apt install build-essential` (Debian/Ubuntu) or `sudo dnf install make` (Fedora) |
+
+**[Windows] make is installed but still not found?** Add it to your PATH:
+
+1. Find where make is installed:
+   - Chocolatey: `C:\ProgramData\chocolatey\bin` (or `/c/ProgramData/chocolatey/bin` in Git Bash)
+   - GnuWin32: `C:\Program Files (x86)\GnuWin32\bin`
+   - MinGW: `C:\MinGW\bin` (may be named `mingw32-make.exe`)
+
+2. Add to PATH:
+   - Press `Win + R`, type `sysdm.cpl`, press Enter
+   - Go to **Advanced** tab → **Environment Variables**
+   - Under "User variables", select **Path** → **Edit** → **New**
+   - Paste the path (e.g., `C:\ProgramData\chocolatey\bin`)
+   - Click **OK** on all dialogs
+
+3. Restart your terminal and try `make run` again
+
+**If `make run` fails**, use the [step-by-step instructions](#step-by-step-if-one-command-doesnt-work) below.
+
+**"Cannot reach the backend"?** The frontend calls `http://localhost:8000`. Ensure backend is running. On Windows, keep the spawned command windows open.
 
 ---
 
@@ -53,14 +110,13 @@ For live FOD detection instead of mock results, install [Ollama](https://ollama.
 
 ## Step-by-step (if one command doesn't work)
 
-Use these steps if `make run` fails or you're on Windows (where `run.sh` is not supported). Run each step in order; use **two terminals** for backend and frontend.
+Use these steps if `make run` or `run.bat` fails. Run each step in order; use **two terminals** for backend and frontend.
 
 ### 1. Environment
 
-Ensure `backend/.env` exists. If not, copy from example or create with:
+Ensure `backend/.env` exists. If not, create it with these contents:
 
-```bash
-# backend/.env (do not commit; use .env.example for docs)
+```
 DATABASE_URL=postgresql://user:pass@127.0.0.1:5434/appdb
 MINIO_ENDPOINT=localhost:9002
 MINIO_ACCESS_KEY=minioadmin
@@ -71,38 +127,48 @@ MINIO_USE_SSL=false
 DETECTION_WEBHOOK_SECRET=dev-webhook-secret
 ```
 
-(Ports 5434 and 9002 match `docker-compose.yml`.)
-
 ### 2. Docker
 
-From the project root, start Postgres and MinIO:
+Start Postgres and MinIO:
 
 ```bash
 docker compose up -d
 ```
 
-Optional: wait a few seconds, then check containers are up: `docker ps`.
+### 3. Backend (Terminal 1)
 
-### 3. Backend
-
-In a **first terminal**, from the project root:
-
+#### [Linux/macOS]
 ```bash
 cd backend
 python3 -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Leave this terminal running. Then check:
+#### [Windows - Command Prompt]
+```cmd
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
 
+#### [Windows - PowerShell]
+```powershell
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Leave this terminal running.
 - API: http://127.0.0.1:8000
 - Swagger: http://127.0.0.1:8000/docs
 
-### 4. Frontend (second terminal)
-
-Open a **new terminal**, from the project root:
+### 4. Frontend (Terminal 2)
 
 ```bash
 cd frontend
@@ -111,7 +177,7 @@ npm run dev
 ```
 
 - App: http://localhost:3998
-- Log in with: `test@example.com` / `test`
+- Log in: `test@example.com` / `test`
 
 ---
 
@@ -130,22 +196,33 @@ make test        # full suite
 make test-unit   # unit tests only
 ```
 
-Or from `backend/` with venv active:
+Or manually from `backend/` with venv active:
 
+#### [Linux/macOS]
 ```bash
+cd backend
+source venv/bin/activate
 pytest
-pytest tests/unit/services/test_auth_service.py -v
+```
+
+#### [Windows]
+```cmd
+cd backend
+venv\Scripts\activate
+pytest
 ```
 
 ---
 
 ## Teardown
 
-- **Stop backend/frontend:** Ctrl+C (if you used `./run.sh`).
-- **Stop everything:** `make kill` — stops backend (8000), frontend (3998), Ollama (11434), and Docker.
-- **Stop everything + reset DB:** `make kill-reset` — same as above and removes Docker volumes (fresh DB on next `make run`).
-- **Docker only:** `make dev-down` or `docker compose down`.
-- **Reset DB and storage:** `docker compose down -v` then `docker compose up -d`.
+| Action | Linux/macOS | Windows |
+|--------|-------------|---------|
+| Stop backend/frontend | `Ctrl+C` | Close command windows |
+| Stop everything | `make kill` | `make kill` or `.\kill.bat` |
+| Stop + reset DB | `make kill-reset` | `make kill-reset` or `.\kill.bat -reset` |
+| Stop Docker only | `docker compose down` | `docker compose down` |
+| Reset DB + storage | `docker compose down -v` | `docker compose down -v` |
 
 ---
 
