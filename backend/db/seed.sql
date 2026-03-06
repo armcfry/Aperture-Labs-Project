@@ -17,21 +17,21 @@ INSERT INTO users (
 (
     '11111111-1111-1111-1111-111111111111',
     'alice@example.com',
-    'password123',
+    '$2b$12$6YZq8k1bavPfmrpLFc5rauOiQiKcochddUwcR8FswQ72pla6NyFLG',
     NOW(),
     NOW()
 ),
 (
     '22222222-2222-2222-2222-222222222222',
     'bob@example.com',
-    'password123',
+    '$2b$12$J9jR5Zf3scWe8.LlerPBAeXqO9TbEMtdf.Vrqbw4FsR2g4miv/q3S',
     NOW(),
     NOW()
 ),
 (
     '33333333-3333-3333-3333-333333333333',
     'carol@example.com',
-    'password123',
+    '$2b$12$HKRAlQ31mt7ThAyxBtRfUehZAv.2kCA0lSIFEUpDXbkd/DuvAAlLW',
     NOW(),
     NOW()
 );

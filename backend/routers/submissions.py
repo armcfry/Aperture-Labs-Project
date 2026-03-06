@@ -4,6 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
+from core.deps import get_current_user
 from db.session import get_db
 from schemas.submissions import (
     SubmissionCreate,
@@ -16,6 +17,7 @@ from services import submission_service
 router = APIRouter(
     prefix="/projects/{project_id}/submissions",
     tags=["Submissions"],
+    dependencies=[Depends(get_current_user)],
 )
 
 

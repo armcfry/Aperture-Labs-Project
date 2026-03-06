@@ -43,3 +43,8 @@ def trigger_detection(
     print(f"[detection] triggered for submission {submission_id}")
     print(f"[detection] image: {image_object_key}")
     print(f"[detection] designs: {design_object_keys}")
+
+
+def handle_detection_result(_payload: dict) -> None:
+    """Process an incoming detection result from the webhook."""
+    pass

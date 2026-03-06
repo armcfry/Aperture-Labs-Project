@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, UploadFile, File, Query, status
 from sqlalchemy.orm import Session
 
+from core.deps import get_current_user
 from db.session import get_db
 from schemas.projects import UploadResponse
 from schemas.storage import ImageUploadResponse
@@ -13,6 +14,7 @@ from services import storage_service
 router = APIRouter(
     prefix="/storage",
     tags=["Storage"],
+    dependencies=[Depends(get_current_user)],
 )
 
 ALLOWED_DESIGN_TYPES = ["application/pdf", "text/plain"]

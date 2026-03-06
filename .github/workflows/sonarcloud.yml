@@ -37,7 +37,6 @@ jobs:
           MINIO_BUCKET_DESIGNS: designs
           MINIO_BUCKET_IMAGES: images
           MINIO_USE_SSL: false
-          DETECTION_WEBHOOK_SECRET: "test-webhook-secret"
         run: |
           cd backend
           pytest --cov=. --cov-report=xml:coverage.xml --cov-report=term-missing

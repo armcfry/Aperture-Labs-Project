@@ -26,6 +26,7 @@ from core.exception_handlers import (
     user_not_found_handler,
     member_not_found_handler,
     submission_not_found_handler,
+    unauthorized_handler,
     permission_denied_handler,
     conflict_error_handler,
     invalid_state_transition_handler,
@@ -88,6 +89,7 @@ app.add_exception_handler(exceptions.AnomalyNotFound, anomaly_not_found_handler)
 app.add_exception_handler(exceptions.UserNotFound, user_not_found_handler)
 app.add_exception_handler(exceptions.MemberNotFound, member_not_found_handler)
 app.add_exception_handler(exceptions.SubmissionNotFound, submission_not_found_handler)
+app.add_exception_handler(exceptions.Unauthorized, unauthorized_handler)
 app.add_exception_handler(exceptions.PermissionDenied, permission_denied_handler)
 app.add_exception_handler(exceptions.ConflictError, conflict_error_handler)
 app.add_exception_handler(exceptions.InvalidStateTransition, invalid_state_transition_handler)
