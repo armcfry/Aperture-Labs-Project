@@ -11,7 +11,7 @@ import logging
 import re
 from typing import Optional
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class OWLv2Detector:
 
         severity_map = severity_map or {}
 
-        inputs = self._processor(text=[queries], images=image, return_tensors="pt")
+        inputs = self._processor(text=[queries], images=image, return_tensors="pt", truncation=True)
         inputs = {k: v.to(self._device) for k, v in inputs.items()}
         with torch.no_grad():
             outputs = self._model(**inputs)
@@ -113,26 +113,12 @@ class OWLv2Detector:
         annotated = image.copy().convert("RGB")
         draw = ImageDraw.Draw(annotated)
 
-        try:
-            font = ImageFont.load_default(size=14)
-        except TypeError:
-            font = ImageFont.load_default()
-
         for label_idx, (score, box) in best.items():
             x1, y1, x2, y2 = box
             sev = severity_map.get(label_idx, "")
             color = _SEVERITY_COLORS.get(sev, _DEFAULT_COLOR)
-            label = queries[label_idx] if label_idx < len(queries) else "unknown"
-            text = f"{label[:35]} {score:.0%}"
 
             draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
-
-            text_bbox = draw.textbbox((x1, y1), text, font=font)
-            tw = text_bbox[2] - text_bbox[0]
-            th = text_bbox[3] - text_bbox[1]
-            lx, ly = x1, max(0, y1 - th - 4)
-            draw.rectangle([lx, ly, lx + tw + 6, ly + th + 4], fill=color)
-            draw.text((lx + 3, ly + 2), text, fill=(255, 255, 255), font=font)
 
         return annotated
 

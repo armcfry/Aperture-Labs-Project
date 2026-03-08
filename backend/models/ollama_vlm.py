@@ -47,14 +47,37 @@ def _severity_from_line(line: str) -> Optional[str]:
     return None
 
 
+_METADATA_LABEL_RE = re.compile(
+    r"^(object\s+classification|approximate\s+location|location|severity(\s+rating)?|"
+    r"confidence(\s+score)?|recommended\s+action)\s*[:\s]",
+    re.I,
+)
+
+
+def _is_metadata_content(text: str) -> bool:
+    """Return True if text starts with a known metadata label (e.g. 'Confidence Score:').
+    Strips leading articles/demonstratives so sentences like 'The confidence score for...'
+    are also caught."""
+    cleaned = re.sub(r"^(the|a|an|this)\s+", "", text.strip(), flags=re.I)
+    return bool(_METADATA_LABEL_RE.match(cleaned))
+
+
+def _clean_description(desc: str) -> str:
+    """Strip a leading metadata label prefix from a defect description."""
+    return _METADATA_LABEL_RE.sub("", desc).strip()
+
+
 def _parse_one_bullet(rest: str, current_severity: str, defect_index: int) -> Optional[dict]:
-    """Parse a bullet line into one defect entry dict, or None if too short."""
-    if len(rest) < 5:
+    """Parse a bullet line into one defect entry dict, or None if metadata/too short."""
+    if _is_metadata_content(rest):
+        return None
+    desc = _clean_description(rest)
+    if len(desc) < 5:
         return None
     return {
         "id": f"DEF-{str(defect_index + 1).zfill(3)}",
         "severity": current_severity,
-        "description": rest.strip(),
+        "description": desc,
     }
 
 
@@ -72,7 +95,9 @@ def _fallback_defect(response: str) -> Optional[DefectSchema]:
 
 
 def _is_continuation_line(stripped: str) -> bool:
-    return stripped.startswith("location:") or stripped.startswith("recommended action:")
+    # Strip leading bullet chars so both "- Location: x" and "• Location: x" are caught
+    inner = re.sub(r"^[•\-*\s]+", "", stripped)
+    return _is_metadata_content(inner)
 
 
 def _append_continuation(entries: list[dict], line: str) -> None:
@@ -93,7 +118,6 @@ def _parse_defects_from_response(response: str) -> list[DefectSchema]:
 
         stripped = line.lower().strip()
         if entries and _is_continuation_line(stripped):
-            _append_continuation(entries, line)
             continue
 
         bullet_match = re.match(r"^[\s]*[•\-*]\s*(.+)", line)
