@@ -113,6 +113,7 @@ def _parse_defects_from_response(response: str) -> list[DefectSchema]:
     return defects
 
 
+
 def get_mock_detection_response() -> DetectionResponse:
     """Return a mock detection result when Ollama is unavailable (e.g. not running or timeout)."""
     mock_text = """INSPECTION SUMMARY (Demo - AI service unavailable)
@@ -222,6 +223,7 @@ class OllamaVLM:
                         description="Inspection failed. See full analysis above for details.",
                     )
                 ]
+
             return DetectionResponse(
                 response=raw_response,
                 model=self.model_name,

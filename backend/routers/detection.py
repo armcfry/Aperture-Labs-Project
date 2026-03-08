@@ -10,6 +10,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from PIL import Image
 
 from models.ollama_vlm import get_model, get_mock_detection_response
+from models.owlv2 import get_owlv2_detector, build_queries_and_severity_map, image_to_base64
 from schemas.detection import DetectionResponse
 from services import minio_client
 from utils.file_validation import MAX_IMAGE_UPLOAD_BYTES, is_image
@@ -110,9 +111,22 @@ async def detect_fod(
 
     model = get_model()
     try:
-        return model.detect_fod(image, None, spec_text or None)
+        result = model.detect_fod(image, None, spec_text or None)
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
         return get_mock_detection_response()
     except Exception:
         logger.exception("Detection failed")
         raise HTTPException(status_code=500, detail="Detection failed")
+
+    # Run OWLv2 to localize defects found by the VLM
+    if result.defects:
+        try:
+            queries, severity_map = build_queries_and_severity_map(result.defects)
+            if queries:
+                detector = get_owlv2_detector()
+                annotated = detector.annotate(image, queries, severity_map)
+                result.annotated_image = image_to_base64(annotated)
+        except Exception:
+            logger.exception("OWLv2 annotation failed — returning result without bounding boxes")
+
+    return result

@@ -203,6 +203,8 @@ export type DetectionResponse = {
         severity: string;
         description: string;
     }>;
+    /** Base64 PNG with bounding boxes drawn by Qwen2.5-VL grounding (when boxes were detected) */
+    annotated_image?: string | null;
 };
 
 export async function detectFod(file: File, projectId?: string | null): Promise<DetectionResponse> {

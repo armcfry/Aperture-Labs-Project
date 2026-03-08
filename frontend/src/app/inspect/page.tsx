@@ -168,6 +168,7 @@ RECOMMENDATION: Product does not meet manufacturing specifications. Immediate re
                 analysis: string;
                 model?: string;
                 inferenceTimeMs?: number;
+                annotatedImage?: string;
             }> = [];
 
             for (let i = 0; i < filesToAnalyze.length; i++) {
@@ -201,6 +202,7 @@ RECOMMENDATION: Product does not meet manufacturing specifications. Immediate re
                         analysis: result.response,
                         model: result.model,
                         inferenceTimeMs: result.inference_time_ms,
+                        annotatedImage: result.annotated_image ?? undefined,
                     });
                 } catch (err) {
                     const msg = err instanceof Error ? err.message : "Detection failed";

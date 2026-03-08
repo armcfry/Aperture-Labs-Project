@@ -1,0 +1,221 @@
+"""
+OWLv2 zero-shot object detection for bounding box annotation.
+
+Requires: pip install transformers torch
+Model: google/owlv2-base-patch16-ensemble (~600 MB, downloaded on first use)
+"""
+
+import base64
+import io
+import logging
+import re
+from typing import Optional
+
+from PIL import Image, ImageDraw, ImageFont
+
+logger = logging.getLogger(__name__)
+
+_SEVERITY_COLORS: dict[str, tuple[int, int, int]] = {
+    "critical": (220, 38, 38),   # red
+    "major": (234, 88, 12),      # orange
+    "minor": (202, 138, 4),      # yellow
+}
+_DEFAULT_COLOR: tuple[int, int, int] = (59, 130, 246)  # blue
+
+
+class OWLv2Detector:
+    """Lazy-loaded OWLv2 zero-shot object detector."""
+
+    def __init__(self, model_id: str = "google/owlv2-base-patch16-ensemble"):
+        self.model_id = model_id
+        self._processor = None
+        self._model = None
+        self._device = None
+
+    def _load(self) -> None:
+        if self._model is not None:
+            return
+        try:
+            import torch  # noqa: F401
+            from transformers import Owlv2ForObjectDetection, Owlv2Processor  # noqa: F401
+        except ImportError as e:
+            raise RuntimeError(
+                "OWLv2 requires 'transformers' and 'torch'. "
+                "Install with: pip install transformers torch"
+            ) from e
+
+        import torch
+        from transformers import Owlv2ForObjectDetection, Owlv2Processor
+
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info("Loading OWLv2 model: %s on %s (first-run download may take a moment)", self.model_id, self._device)
+        self._processor = Owlv2Processor.from_pretrained(self.model_id)
+        self._model = Owlv2ForObjectDetection.from_pretrained(self.model_id)
+        self._model.to(self._device)
+        self._model.eval()
+        logger.info("OWLv2 model loaded on %s.", self._device)
+
+    def annotate(
+        self,
+        image: Image.Image,
+        queries: list[str],
+        severity_map: dict[int, str] | None = None,
+        threshold: float = 0.05,
+    ) -> Image.Image:
+        """
+        Run OWLv2 on the image with text queries and draw bounding boxes.
+
+        For each query, only the highest-confidence detection above threshold
+        is kept to avoid cluttering the image with false positives.
+
+        Args:
+            image: PIL Image to annotate.
+            queries: Text queries from defect descriptions.
+            severity_map: Maps query index -> severity string for color coding.
+            threshold: Minimum confidence to draw a box.
+
+        Returns:
+            Annotated PIL Image. Returns original image unchanged if no detections.
+        """
+        import torch
+
+        self._load()
+        if not queries:
+            return image
+
+        severity_map = severity_map or {}
+
+        inputs = self._processor(text=[queries], images=image, return_tensors="pt")
+        inputs = {k: v.to(self._device) for k, v in inputs.items()}
+        with torch.no_grad():
+            outputs = self._model(**inputs)
+
+        target_sizes = torch.tensor([image.size[::-1]], device=self._device)  # (H, W)
+        results = self._processor.image_processor.post_process_object_detection(
+            outputs=outputs,
+            threshold=threshold,
+            target_sizes=target_sizes,
+        )[0]
+
+        boxes = results["boxes"].tolist()
+        scores = results["scores"].tolist()
+        labels = results["labels"].tolist()
+
+        if not boxes:
+            return image
+
+        # Keep only the top-scoring box per query to reduce noise
+        best: dict[int, tuple[float, list]] = {}
+        for box, score, label_idx in zip(boxes, scores, labels):
+            if label_idx not in best or score > best[label_idx][0]:
+                best[label_idx] = (score, box)
+
+        annotated = image.copy().convert("RGB")
+        draw = ImageDraw.Draw(annotated)
+
+        try:
+            font = ImageFont.load_default(size=14)
+        except TypeError:
+            font = ImageFont.load_default()
+
+        for label_idx, (score, box) in best.items():
+            x1, y1, x2, y2 = box
+            sev = severity_map.get(label_idx, "")
+            color = _SEVERITY_COLORS.get(sev, _DEFAULT_COLOR)
+            label = queries[label_idx] if label_idx < len(queries) else "unknown"
+            text = f"{label[:35]} {score:.0%}"
+
+            draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
+
+            text_bbox = draw.textbbox((x1, y1), text, font=font)
+            tw = text_bbox[2] - text_bbox[0]
+            th = text_bbox[3] - text_bbox[1]
+            lx, ly = x1, max(0, y1 - th - 4)
+            draw.rectangle([lx, ly, lx + tw + 6, ly + th + 4], fill=color)
+            draw.text((lx + 3, ly + 2), text, fill=(255, 255, 255), font=font)
+
+        return annotated
+
+
+def image_to_base64(image: Image.Image) -> str:
+    """Encode a PIL image as a base64 PNG string."""
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+def _defect_to_query(description: str) -> str:
+    """Shorten a verbose defect description into a concise OWLv2 search query."""
+    # Strip position hints: parenthesised "(25%, 30%)" and bare "19% 24.8%"
+    description = re.sub(r"\s*\(\d+\.?\d*%[^)]*\)", "", description).strip()
+    description = re.sub(r"\s*\b\d+\.?\d*%(\s+\d+\.?\d*%)*", "", description).strip()
+    # Strip known metadata label prefixes before any further processing
+    description = re.sub(
+        r"^(object\s+classification|approximate\s+location|location|severity(\s+rating)?|"
+        r"confidence(\s+score)?|recommended\s+action|severity\s+rating)[:\s]*",
+        "",
+        description,
+        flags=re.I,
+    ).strip()
+    # Strip any leading bare number left over (e.g. "1.0" from "Confidence score: 1.0")
+    description = re.sub(r"^\d+\.?\d*\s*", "", description).strip()
+    # If a colon is present (e.g. "Surface Integrity: Foreign object detected"),
+    # prefer the more descriptive part after it
+    colon = description.find(":")
+    if 0 < colon < 60:
+        after = description[colon + 1:].strip()
+        # Strip leading numeric values left over from labels like "Confidence score: 0.9 bolt"
+        after = re.sub(r"^\d+\.?\d*\s*", "", after).strip()
+        if len(after) >= 4:
+            description = after
+    # Take only the first clause of what remains
+    for sep in (" — ", " - ", ",", ".", "("):
+        idx = description.find(sep)
+        if 4 < idx < 60:
+            description = description[:idx]
+            break
+    result = description[:50].strip()
+    # Reject queries that are clearly metadata values, not visual descriptions:
+    # single severity words, bare numbers, single characters, or empty strings
+    _METADATA_WORDS = {"high", "med", "medium", "low", "critical", "major", "minor",
+                       "pass", "fail", "true", "false", "n/a", "none", "null"}
+    if result.lower() in _METADATA_WORDS or re.fullmatch(r"[\d\s.,%]+", result) or len(result) < 4:
+        return ""
+    # Must contain at least one alphabetic word of 3+ characters to be a valid visual query
+    if not re.search(r"[a-zA-Z]{3,}", result):
+        return ""
+    return result
+
+
+def build_queries_and_severity_map(
+    defects: list,
+) -> tuple[list[str], dict[int, str]]:
+    """
+    Convert DefectSchema objects into OWLv2 text queries + severity color map.
+
+    Returns:
+        (queries, severity_map) where severity_map[i] is the severity for query i.
+    """
+    queries: list[str] = []
+    severity_map: dict[int, str] = {}
+    seen: set[str] = set()
+
+    for defect in defects:
+        q = _defect_to_query(defect.description)
+        if not q or q in seen:
+            continue
+        seen.add(q)
+        severity_map[len(queries)] = defect.severity
+        queries.append(q)
+
+    return queries, severity_map
+
+
+_detector: Optional[OWLv2Detector] = None
+
+
+def get_owlv2_detector() -> OWLv2Detector:
+    global _detector
+    if _detector is None:
+        _detector = OWLv2Detector()
+    return _detector
