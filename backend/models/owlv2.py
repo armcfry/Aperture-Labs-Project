@@ -60,7 +60,7 @@ class OWLv2Detector:
         image: Image.Image,
         queries: list[str],
         severity_map: dict[int, str] | None = None,
-        threshold: float = 0.05,
+        threshold: float = 0.1,
     ) -> Image.Image:
         """
         Run OWLv2 on the image with text queries and draw bounding boxes.
@@ -162,10 +162,15 @@ def _defect_to_query(description: str) -> str:
         after = re.sub(r"^\d+\.?\d*\s*", "", after).strip()
         if len(after) >= 4:
             description = after
-    # Take only the first clause of what remains
-    for sep in (" — ", " - ", ",", ".", "("):
+    # Strip leading article so the object noun is exposed for clause-splitting below
+    # (e.g. "The bolt is classified…" → "bolt is classified…")
+    description = re.sub(r"^(the|a|an)\s+", "", description, flags=re.I).strip()
+    # Take only the first clause of what remains.
+    # Verb phrases are added so sentences like "bolt is classified as CRITICAL FAILURE"
+    # are cut to just "bolt" — a concrete visual noun OWLv2 can match against.
+    for sep in (" — ", " - ", " is ", " are ", " was ", " were ", " has ", ",", ".", "("):
         idx = description.find(sep)
-        if 4 < idx < 60:
+        if 3 < idx < 60:
             description = description[:idx]
             break
     result = description[:50].strip()
