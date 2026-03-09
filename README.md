@@ -9,7 +9,7 @@ Foreign Object Debris (FOD) detection using Vision Language Models.
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- Python 3.12 or 3.13
+- Python 3.11-3.13
 - Node.js (e.g. 22.x)
 - `pip`, `npm`
 
