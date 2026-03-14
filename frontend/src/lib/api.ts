@@ -24,10 +24,23 @@ async function parseJsonResponse<T>(res: Response, fallbackMessage: string): Pro
     return data as T;
 }
 
+/* ---------- Auth token ---------- */
+let _authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+    _authToken = token;
+}
+
+function authHeaders(): Record<string, string> {
+    return _authToken ? { Authorization: `Bearer ${_authToken}` } : {};
+}
+
 /* ---------- Auth ---------- */
 export type LoginRequest = { email: string; password: string };
 export type LoginResponse = {
     success: boolean;
+    access_token?: string;
+    token_type?: string;
     user?: { id: string; email: string };
     message?: string;
 };
@@ -55,7 +68,7 @@ export async function listProjects(includeArchived?: boolean): Promise<ApiProjec
     const url = includeArchived === true
         ? `${API_BASE_URL}/projects?include_archived=true`
         : `${API_BASE_URL}/projects`;
-    const res = await fetch(url);
+    const res = await fetch(url, { headers: authHeaders() });
     const data = await parseJsonResponse<unknown>(res, `Failed to list projects: ${res.status}`);
     return Array.isArray(data) ? data : [];
 }
@@ -66,7 +79,7 @@ export async function createProject(payload: {
 }): Promise<ApiProject> {
     const res = await fetch(`${API_BASE_URL}/projects`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(payload),
     });
     return parseJsonResponse<ApiProject>(res, `Failed to create project: ${res.status}`);
@@ -75,6 +88,7 @@ export async function createProject(payload: {
 export async function archiveProject(projectId: string): Promise<ApiProject> {
     const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/archive`, {
         method: "POST",
+        headers: authHeaders(),
     });
     return parseJsonResponse<ApiProject>(res, `Failed to archive project: ${res.status}`);
 }
@@ -82,6 +96,7 @@ export async function archiveProject(projectId: string): Promise<ApiProject> {
 export async function deleteProject(projectId: string): Promise<void> {
     const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}`, {
         method: "DELETE",
+        headers: authHeaders(),
     });
     await parseJsonResponse<unknown>(res, `Failed to delete project: ${res.status}`);
 }
@@ -90,6 +105,7 @@ export async function deleteProject(projectId: string): Promise<void> {
 export async function listDesignSpecs(projectId: string): Promise<string[]> {
     const res = await fetch(
         `${API_BASE_URL}/storage/designs?project_id=${encodeURIComponent(projectId)}`,
+        { headers: authHeaders() },
     );
     const data = await parseJsonResponse<unknown>(res, `Failed to list design specs: ${res.status}`);
     return Array.isArray(data) ? data : [];
@@ -103,7 +119,7 @@ export async function uploadDesignSpec(
     formData.append("file", file);
     const res = await fetch(
         `${API_BASE_URL}/storage/design?project_id=${encodeURIComponent(projectId)}`,
-        { method: "POST", body: formData },
+        { method: "POST", body: formData, headers: authHeaders() },
     );
     return parseJsonResponse(res, `Failed to upload design spec: ${res.status}`);
 }
@@ -117,7 +133,7 @@ export async function uploadImage(
     formData.append("file", file);
     const res = await fetch(
         `${API_BASE_URL}/storage/image?project_id=${encodeURIComponent(projectId)}&user_id=${encodeURIComponent(userId)}`,
-        { method: "POST", body: formData },
+        { method: "POST", body: formData, headers: authHeaders() },
     );
     return parseJsonResponse(res, `Failed to upload image: ${res.status}`);
 }
@@ -126,6 +142,7 @@ export async function getDesignSpecUrl(projectId: string, filename: string): Pro
     const objectKey = `${projectId}/designs/${filename}`;
     const res = await fetch(
         `${API_BASE_URL}/storage/design/${encodeURIComponent(objectKey)}?expires=900&download=false`,
+        { headers: authHeaders() },
     );
     const data = await parseJsonResponse<{ url: string }>(res, `Failed to get design spec URL: ${res.status}`);
     return data.url;
@@ -157,6 +174,7 @@ export type ApiAnomaly = {
 export async function listSubmissions(projectId: string): Promise<ApiSubmission[]> {
     const res = await fetch(
         `${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/submissions`,
+        { headers: authHeaders() },
     );
     const data = await parseJsonResponse<unknown>(res, `Failed to list submissions: ${res.status}`);
     return Array.isArray(data) ? data : [];
@@ -165,6 +183,7 @@ export async function listSubmissions(projectId: string): Promise<ApiSubmission[
 export async function listAnomalies(submissionId: string): Promise<ApiAnomaly[]> {
     const res = await fetch(
         `${API_BASE_URL}/anomalies?submission_id=${encodeURIComponent(submissionId)}`,
+        { headers: authHeaders() },
     );
     const data = await parseJsonResponse<unknown>(res, `Failed to list anomalies: ${res.status}`);
     return Array.isArray(data) ? data : [];
@@ -176,6 +195,7 @@ export async function getSubmission(
 ): Promise<ApiSubmission | null> {
     const res = await fetch(
         `${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/submissions/${encodeURIComponent(submissionId)}`,
+        { headers: authHeaders() },
     );
     if (res.status === 404) return null;
     return parseJsonResponse<ApiSubmission>(res, `Failed to get submission: ${res.status}`);
@@ -185,6 +205,7 @@ export async function getImageUrl(objectKey: string): Promise<string> {
     const encodedKey = objectKey.split("/").map(encodeURIComponent).join("/");
     const res = await fetch(
         `${API_BASE_URL}/storage/image/${encodedKey}?expires=900&download=false`,
+        { headers: authHeaders() },
     );
     const data = await parseJsonResponse<{ url: string }>(res, `Failed to get image URL: ${res.status}`);
     return data.url;

@@ -65,7 +65,8 @@ async def upload_image(
             detail="File content is not a valid PNG or JPEG image",
         )
     bucket = str(project_id)
-    object_name = f"images/{file.filename}"
+    unique_prefix = uuid.uuid4().hex[:8]
+    object_name = f"images/{unique_prefix}_{file.filename}"
 
     minio_client.upload_file(
         bucket=bucket,
@@ -153,6 +154,11 @@ def get_presigned_url(
     download: bool = False,
 ) -> PresignedUrlResponse:
     # object_key format: "{project_id}/{prefix}/{filename}" (e.g. images/ or designs/)
+    if "/" not in object_key:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid object_key '{object_key}': must be 'bucket/object_name'",
+        )
     bucket, object_name = object_key.split("/", 1)
     url = minio_client.get_presigned_url(
         bucket=bucket,

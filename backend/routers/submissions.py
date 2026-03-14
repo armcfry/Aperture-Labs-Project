@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 from typing import List
 
@@ -13,6 +14,7 @@ from schemas.submissions import (
 )
 from services import submission_service
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/projects/{project_id}/submissions",
@@ -34,11 +36,14 @@ def create_submission(
     payload: SubmissionCreate,
     db: Session = Depends(get_db),
 ):
-    return submission_service.create_submission(
+    logger.info("POST create_submission project_id=%s image_id=%s", project_id, payload.image_id)
+    result = submission_service.create_submission(
         db=db,
         project_id=project_id,
         payload=payload,
     )
+    logger.info("Submission created id=%s status=%s", result.id, result.status)
+    return result
 
 
 # -------------------------
@@ -118,11 +123,14 @@ def retry_submission(
     submission_id: UUID,
     db: Session = Depends(get_db),
 ):
-    return submission_service.retry_submission(
+    logger.info("POST retry_submission project_id=%s submission_id=%s", project_id, submission_id)
+    result = submission_service.retry_submission(
         db=db,
         project_id=project_id,
         submission_id=submission_id,
     )
+    logger.info("Submission retry queued id=%s status=%s", result.id, result.status)
+    return result
 
 
 # # -------------------------

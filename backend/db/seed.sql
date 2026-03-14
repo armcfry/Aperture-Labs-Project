@@ -3,14 +3,14 @@ BEGIN;
 --==============================================
 -- insert sample data for all tables
 
--- users (passwords stored in plain text; test@example.com password: test, others: password123)
+-- users (bcrypt hashed passwords; test@example.com password: test, others: password123)
 INSERT INTO users (
     id, email, password_hash, created_at, updated_at
 ) VALUES
 (
     '00000000-0000-0000-0000-000000000001',
     'test@example.com',
-    'test',
+    '$2b$12$R.P5R9Wxi0K8O22nB7jsM.qpIy6YGvj8p8rAmf3oJtCYPiJY6B1SG',
     NOW(),
     NOW()
 ),
