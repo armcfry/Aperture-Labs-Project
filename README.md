@@ -68,7 +68,6 @@ MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET_DESIGNS=designs
 MINIO_BUCKET_IMAGES=images
 MINIO_USE_SSL=false
-DETECTION_WEBHOOK_SECRET=dev-webhook-secret
 ```
 
 (Ports 5434 and 9002 match `docker-compose.yml`.)

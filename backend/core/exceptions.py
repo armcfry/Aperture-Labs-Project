@@ -32,6 +32,10 @@ class SubmissionNotFound(AppException):
 # -------------------------
 # Auth / Permissions
 # -------------------------
+class Unauthorized(AppException):
+    default_detail = "Authentication required"
+
+
 class PermissionDenied(AppException):
     default_detail = "You do not have permission to perform this action"
 

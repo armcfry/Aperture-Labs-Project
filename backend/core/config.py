@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     MINIO_BUCKET_DESIGNS: str
     MINIO_BUCKET_IMAGES: str
     MINIO_USE_SSL: bool = False
-    DETECTION_WEBHOOK_SECRET: str
+    SECRET_KEY: str = "dev-secret-key-change-in-production"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
 
 settings = Settings()  # ← this line must be here

@@ -1,12 +1,19 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from .enums import SubmissionStatus, SubmissionPassFail
 
 
 class SubmissionBase(BaseModel):
     project_id: uuid.UUID
-    image_id: str  # object key e.g. "project-id/my_image.png"
+    image_id: str  # object key e.g. "{project_id}/images/filename.png"
+
+    @field_validator("image_id")
+    @classmethod
+    def image_id_must_contain_slash(cls, v: str) -> str:
+        if "/" not in v:
+            raise ValueError("image_id must be in the format 'bucket/object_name'")
+        return v
 
 
 class SubmissionCreate(SubmissionBase):

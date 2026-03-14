@@ -10,6 +10,7 @@ import {
     useMemo,
     useState,
 } from "react";
+import { setAuthToken } from "@/lib/api";
 
 /**
  * Minimal AppProvider
@@ -29,7 +30,7 @@ export type Project = {
     designSpecs: string[]; // filenames of uploaded design specs
 };
 
-export type User = { id: string; email: string } | null;
+export type User = { id: string; email: string; token: string } | null;
 
 type AppState = {
     theme: Theme;
@@ -90,6 +91,11 @@ export default function AppProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         writeStorage({ theme, sidebarOpen, currentProject, user });
     }, [theme, sidebarOpen, currentProject, user]);
+
+    // Sync JWT token into the api module whenever the user changes
+    useEffect(() => {
+        setAuthToken(user?.token ?? null);
+    }, [user]);
 
     // Apply dark mode class to <html> for Tailwind dark: variants and CSS variables
     useEffect(() => {
@@ -197,8 +203,9 @@ function readStorage(): { theme: Theme; sidebarOpen: boolean; currentProject: Pr
             storedUser &&
             typeof storedUser === "object" &&
             typeof storedUser.id === "string" &&
-            typeof storedUser.email === "string"
-                ? { id: storedUser.id, email: storedUser.email }
+            typeof storedUser.email === "string" &&
+            typeof storedUser.token === "string"
+                ? { id: storedUser.id, email: storedUser.email, token: storedUser.token }
                 : DEFAULTS.user;
         return {
             theme: (parsed?.theme as Theme) ?? DEFAULTS.theme,

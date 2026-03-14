@@ -438,7 +438,7 @@ RECOMMENDATION: Product does not meet manufacturing specifications. Immediate re
                         <div className="space-y-3">
                             <div className="grid grid-cols-3 gap-3 p-3 bg-slate-100 dark:bg-zinc-800 rounded-xl border-2 border-slate-200 dark:border-zinc-700">
                                 {productPhotos.map((photo, index) => (
-                                    <div key={`${photo.name}-${photo.size}-${photo.lastModified}`} className="relative group/photo">
+                                    <div key={`${photo.name}-${photo.size}-${photo.lastModified}-${index}`} className="relative group/photo">
                                         <img
                                             src={previewUrls[index] ?? ""}
                                             alt={photo.name}

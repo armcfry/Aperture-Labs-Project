@@ -34,8 +34,8 @@ export default function LoginPage() {
         setIsLoading(true);
         try {
             const res = await login({ email: email.trim(), password });
-            if (res.success && res.user) {
-                setUser({ id: res.user.id, email: res.user.email });
+            if (res.success && res.user && res.access_token) {
+                setUser({ id: res.user.id, email: res.user.email, token: res.access_token });
                 router.push("/projects");
             } else {
                 setError(res.message ?? "Login failed");

@@ -4,6 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
+from core.deps import get_current_user
 from db.session import get_db
 from schemas.users import (
     UserCreate,
@@ -18,9 +19,11 @@ router = APIRouter(
     tags=["Users"],
 )
 
+_auth = [Depends(get_current_user)]
+
 
 # -------------------------
-# Create User
+# Create User (registration — no auth required)
 # -------------------------
 @router.post(
     "",
@@ -40,7 +43,7 @@ def create_user(
 # -------------------------
 # List Users
 # -------------------------
-@router.get("", response_model=List[UserRead])
+@router.get("", response_model=List[UserRead], dependencies=_auth)
 def list_users(
     db: Session = Depends(get_db),
 ):
@@ -50,7 +53,7 @@ def list_users(
 # -------------------------
 # Get Single User
 # -------------------------
-@router.get("/{user_id}", response_model=UserRead)
+@router.get("/{user_id}", response_model=UserRead, dependencies=_auth)
 def get_user(
     user_id: UUID,
     db: Session = Depends(get_db),
@@ -64,7 +67,7 @@ def get_user(
 # -------------------------
 # Update User
 # -------------------------
-@router.patch("/{user_id}", response_model=UserRead)
+@router.patch("/{user_id}", response_model=UserRead, dependencies=_auth)
 def update_user(
     user_id: UUID,
     payload: UserUpdate,
@@ -80,7 +83,7 @@ def update_user(
 # -------------------------
 # Delete User
 # -------------------------
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_auth)
 def delete_user(
     user_id: UUID,
     db: Session = Depends(get_db),

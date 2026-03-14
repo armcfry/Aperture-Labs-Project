@@ -4,6 +4,8 @@ from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
+from core import exceptions
+from core.deps import get_current_user
 from db.session import get_db
 from schemas.projects import (
     ProjectCreate,
@@ -16,6 +18,7 @@ from services import project_service
 router = APIRouter(
     prefix="/projects",
     tags=["Projects"],
+    dependencies=[Depends(get_current_user)],
 )
 
 

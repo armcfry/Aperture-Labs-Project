@@ -32,12 +32,10 @@ export function useInspectionHistory(projectId: string | undefined) {
         try {
             const apiSubs = await listSubmissions(projectId);
             const local = getAllInspections();
-            const localIds = new Set(
-                local.flatMap((i) => (i.submissions ?? []).map((s) => s.id)),
-            );
+            const localInspectionIds = new Set(local.map((i) => i.id));
             const newApiResults: InspectionResult[] = [];
             for (const sub of apiSubs) {
-                if (localIds.has(sub.id)) continue;
+                if (localInspectionIds.has(`api-${sub.id}`)) continue;
                 let thumbUrl = imageUrlCache.current.get(sub.image_id) ?? "";
                 if (!thumbUrl) {
                     try {

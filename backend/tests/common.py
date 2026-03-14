@@ -1,4 +1,5 @@
 import uuid
+from core.security import hash_password
 from db.models import User
 from utils.password import hash_password
 
@@ -6,7 +7,7 @@ from utils.password import hash_password
 def make_user(
     db,
     email: str = "test@example.com",
-    password: str = "password123",
+    password: str = "password123",  # noqa: S107
 ) -> User:
     user = User(
         id=uuid.uuid4(),

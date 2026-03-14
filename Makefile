@@ -39,13 +39,13 @@ kill-reset:
 # Testing
 # -------------------------
 
-# test-up:
-# 	docker compose -f docker-compose-test.yml up -d
-# 	@echo "Waiting for test database to be ready..."
-# 	@sleep 3
+test-up:
+	docker compose -f docker-compose-test.yml up -d
+	@echo "Waiting for test database to be ready..."
+	@sleep 3
 
-# test-down:
-# 	docker compose -f docker-compose-test.yml down
+test-down:
+	docker compose -f docker-compose-test.yml down
 
 test:
 	cd backend && pytest

@@ -8,7 +8,10 @@ os.environ.setdefault("MINIO_ENDPOINT", "localhost:9000")
 os.environ.setdefault("MINIO_ACCESS_KEY", "minioadmin")
 os.environ.setdefault("MINIO_SECRET_KEY", "minioadmin")
 os.environ.setdefault("MINIO_USE_SSL", "false")
-os.environ.setdefault("DETECTION_WEBHOOK_SECRET", "test-webhook-secret")
+os.environ.setdefault("MINIO_BUCKET_DESIGNS", "designs")
+os.environ.setdefault("MINIO_BUCKET_IMAGES", "images")
+os.environ.setdefault("SECRET_KEY", "test-secret-key")
+os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "60")
 
 from fastapi.testclient import TestClient
 

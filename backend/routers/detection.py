@@ -76,6 +76,7 @@ async def detect_fod(
     If project_id is provided, design spec PDFs for that project are read from storage
     and their content is used as the inspection specification for the VLM.
     """
+    logger.info("POST detect_fod filename=%s project_id=%s", file.filename if file else None, project_id)
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="No file uploaded")
 
@@ -110,9 +111,12 @@ async def detect_fod(
 
     model = get_model()
     try:
-        return model.detect_fod(image, None, spec_text or None)
+        result = model.detect_fod(image, None, spec_text or None)
+        logger.info("Detection complete filename=%s pass_fail=%s", file.filename, result.pass_fail)
+        return result
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        logger.warning("Detection skipped (Ollama unreachable) — returning mock response filename=%s", file.filename)
         return get_mock_detection_response()
     except Exception:
-        logger.exception("Detection failed")
+        logger.exception("Detection failed filename=%s", file.filename)
         raise HTTPException(status_code=500, detail="Detection failed")
