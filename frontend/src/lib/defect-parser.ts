@@ -17,6 +17,24 @@ export function normalizeSeverityToDefect(s: string | null | undefined): Defect[
     return "major";
 }
 
+const METADATA_LABEL_RE =
+    /^(object\s+classification|approximate\s+location|location|severity|confidence|recommended\s+action)\s*[:\s]/i;
+
+function isMetadataContent(text: string): boolean {
+    const cleaned = text.trim().replace(/^(the|a|an|this)\s+/i, "");
+    return METADATA_LABEL_RE.test(cleaned);
+}
+
+function cleanDescription(desc: string): string {
+    return desc.replace(METADATA_LABEL_RE, "").trim();
+}
+
+function isMetadataLine(line: string): boolean {
+    // Strip leading bullet chars so both "- Location:" and "• Location:" are caught
+    const inner = line.toLowerCase().replace(/^[•\-*\s]+/, "");
+    return isMetadataContent(inner);
+}
+
 export function parseDefectsFromResponse(response: string): Defect[] {
     const defects: Defect[] = [];
     const lines = response.split(/\r?\n/);
@@ -36,23 +54,17 @@ export function parseDefectsFromResponse(response: string): Defect[] {
             currentSeverity = "minor";
         }
 
-        // "Location:" and "Recommended Action:" are continuation lines, not new defects
-        if (
-            defects.length > 0 &&
-            (lower.includes("location:") || lower.includes("recommended action:"))
-        ) {
-            const extra = line.replace(/^[\s\S]*?:\s*/i, "").trim();
-            const last = defects.at(-1);
-            if (extra && last) {
-                last.description += ` — ${extra}`;
-            }
+        // Skip metadata lines entirely (location, severity, confidence, recommended action, etc.)
+        if (defects.length > 0 && isMetadataLine(line)) {
             continue;
         }
 
-        // Extract bullet points as defect descriptions (skip sub-bullets that are Location/Action)
+        // Extract bullet points as defect descriptions
         const bulletMatch = line.match(/^[\s]*[•\-*]\s*(.+)/);
         if (bulletMatch && currentSeverity) {
-            const desc = bulletMatch[1].trim();
+            const content = bulletMatch[1].trim();
+            if (isMetadataContent(content)) continue;
+            const desc = cleanDescription(content);
             if (desc.length > 5) {
                 defects.push({
                     id: `DEF-${String(defectIndex + 1).padStart(3, "0")}`,
