@@ -151,64 +151,46 @@ export default function InspectResultPage() {
             setNotFound(true);
             return;
         }
-        function tryLoad() {
+        function tryLoad(): boolean {
             const data = getInspection(id);
             if (data) {
                 setResult(data);
-                return;
+                return true;
             }
-            if (id.startsWith("api-") && currentProject?.id) {
-                const submissionId = id.slice(4);
-                const projectId = currentProject.id;
-                Promise.all([getSubmission(projectId, submissionId), listAnomalies(submissionId)])
-                    .then(async ([sub, anomalies]) => {
-                        if (!sub) {
-                            setNotFound(true);
-                            return;
-                        }
-                        let imageUrl = "";
-                        try {
-                            imageUrl = await getImageUrl(sub.image_id);
-                        } catch {
-                            /* ignore */
-                        }
-                        const inspectionResult = buildResultFromApi(
-                            sub,
-                            anomalies ?? [],
-                            currentProject,
-                            imageUrl,
-                        );
-                        setResult(inspectionResult);
-                    })
-                    .catch(() => setNotFound(true));
-                return;
-            }
-            setNotFound(true);
+            return false;
         }
-        tryLoad();
-        // Retry after short delays (handles race where we navigated before store/memory cache was visible)
-        const t1 = setTimeout(() => {
-            const data = getInspection(id);
-            if (data) {
-                setResult(data);
-                setNotFound(false);
-            }
-        }, 100);
+        if (tryLoad()) return;
+
+        if (id.startsWith("api-") && currentProject?.id) {
+            const submissionId = id.slice(4);
+            const projectId = currentProject.id;
+            Promise.all([getSubmission(projectId, submissionId), listAnomalies(submissionId)])
+                .then(async ([sub, anomalies]) => {
+                    if (!sub) {
+                        setNotFound(true);
+                        return;
+                    }
+                    let imageUrl = "";
+                    try {
+                        imageUrl = await getImageUrl(sub.image_id);
+                    } catch {
+                        /* ignore */
+                    }
+                    setResult(buildResultFromApi(sub, anomalies ?? [], currentProject, imageUrl));
+                })
+                .catch(() => setNotFound(true));
+            return;
+        }
+
+        // For local IDs, retry a few times before declaring not found (handles
+        // race between navigation and store/memory-cache visibility).
+        const t1 = setTimeout(() => { tryLoad(); }, 100);
         const t2 = setTimeout(() => {
-            const data = getInspection(id);
-            if (data) {
-                setResult(data);
-                setNotFound(false);
-            }
-        }, 250);
-        // If store updates after we mounted (e.g. save completed), try loading again
-        const onUpdate = () => {
-            const data = getInspection(id);
-            if (data) {
-                setResult(data);
-                setNotFound(false);
-            }
-        };
+            if (!tryLoad()) setNotFound(true);
+        }, 400);
+
+        // Also react to store updates (e.g. analysis completes while we wait)
+        const onUpdate = () => { tryLoad(); };
         globalThis.addEventListener(INSPECTION_UPDATE_EVENT, onUpdate);
         return () => {
             clearTimeout(t1);
@@ -292,26 +274,14 @@ export default function InspectResultPage() {
         globalThis.print();
     };
 
+    useEffect(() => {
+        if (notFound) router.replace("/inspect");
+    }, [notFound, router]);
+
     if (notFound) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-zinc-950 py-12 px-6">
-                <div className="max-w-md text-center">
-                    <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-                    <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-                        Inspection Not Found
-                    </h2>
-                    <p className="text-slate-600 dark:text-zinc-400 mb-6">
-                        This inspection may have expired or the link is invalid. Results are stored
-                        in your session and are cleared when you close the browser.
-                    </p>
-                    <button
-                        onClick={() => router.push("/inspect")}
-                        className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors font-medium"
-                    >
-                        <ChevronLeft className="w-5 h-5" />
-                        Back to New Inspection
-                    </button>
-                </div>
+            <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-zinc-950">
+                <LoadingSpinner label="Redirecting..." />
             </div>
         );
     }

@@ -1,117 +1,73 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
-import {
-    getAllInspections,
-    INSPECTION_UPDATE_EVENT,
-    type InspectionResult,
-    type InspectionSubmission,
-} from "@/lib/inspection-store";
-import { listSubmissions, getImageUrl } from "@/lib/api";
-
-const API_SUBMISSION_RUNNING_STATUSES = new Set(["running", "queued"]);
-
-function submissionImageName(imageId: string): string {
-    const parts = imageId.split("/");
-    return parts.at(-1) ?? "image.png";
-}
-
 /**
- * Shared hook for inspection history. Returns merged local + API inspections when projectId is set.
- * Both sidebars can use this and subscribe to the same event.
+ * Hook for inspection/submission history, sourced entirely from the backend API.
+ * Polls every 3 seconds while any submissions are queued or running.
+ * Dispatching SUBMISSION_UPLOADED_EVENT triggers an immediate refresh.
  */
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { listSubmissions, getImageUrl, type ApiSubmission } from "@/lib/api";
+
+export const SUBMISSION_UPLOADED_EVENT = "glados:submission-uploaded";
+
+const ACTIVE_STATUSES = new Set(["queued", "running"]);
+const POLL_INTERVAL_MS = 3000;
+
 export function useInspectionHistory(projectId: string | undefined) {
-    const [inspections, setInspections] = useState<InspectionResult[]>([]);
-    const imageUrlCache = useRef<Map<string, string>>(new Map());
+    const [submissions, setSubmissions] = useState<ApiSubmission[]>([]);
+    const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+    const pollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const mountedRef = useRef(true);
+    const fetchingUrls = useRef<Set<string>>(new Set());
 
     const refresh = useCallback(async () => {
         if (!projectId) {
-            setInspections(getAllInspections());
+            setSubmissions([]);
             return;
         }
         try {
-            const apiSubs = await listSubmissions(projectId);
-            const local = getAllInspections();
-            const localIds = new Set(
-                local.flatMap((i) => (i.submissions ?? []).map((s) => s.id)),
-            );
-            const newApiResults: InspectionResult[] = [];
-            for (const sub of apiSubs) {
-                if (localIds.has(sub.id)) continue;
-                let thumbUrl = imageUrlCache.current.get(sub.image_id) ?? "";
-                if (!thumbUrl) {
-                    try {
-                        thumbUrl = await getImageUrl(sub.image_id);
-                        imageUrlCache.current.set(sub.image_id, thumbUrl);
-                    } catch {
-                        /* presigned URL failed */
-                    }
+            const subs = await listSubmissions(projectId);
+            if (!mountedRef.current) return;
+            setSubmissions(subs);
+
+            // Fetch presigned image URLs for the most recent submissions
+            for (const sub of subs.slice(0, 30)) {
+                if (!fetchingUrls.current.has(sub.image_id)) {
+                    fetchingUrls.current.add(sub.image_id);
+                    getImageUrl(sub.image_id)
+                        .then(url => {
+                            if (mountedRef.current) {
+                                setImageUrls(prev => ({ ...prev, [sub.image_id]: url }));
+                            }
+                        })
+                        .catch(() => {
+                            fetchingUrls.current.delete(sub.image_id);
+                        });
                 }
-                const isRunning = API_SUBMISSION_RUNNING_STATUSES.has(sub.status);
-                const submissionStatus: "pass" | "fail" | "pending" = isRunning
-                    ? "pending"
-                    : sub.pass_fail === "unknown"
-                      ? "fail"
-                      : sub.pass_fail;
-                const submission: InspectionSubmission = {
-                    id: sub.id,
-                    timestamp: sub.submitted_at,
-                    productPhoto: thumbUrl,
-                    photoName: submissionImageName(sub.image_id),
-                    designSpec: [],
-                    status: submissionStatus,
-                    defects: [],
-                    analysis: "",
-                };
-                const inspection: InspectionResult = {
-                    id: `api-${sub.id}`,
-                    imageUrl: thumbUrl,
-                    response: "",
-                    timestamp: sub.submitted_at,
-                    projectId: sub.project_id,
-                    submissions: [submission],
-                };
-                if (isRunning) {
-                    inspection.status = "running";
-                    inspection.progress = 0;
-                }
-                newApiResults.push(inspection);
             }
-            const merged = [...newApiResults, ...local].sort(
-                (a, b) =>
-                    (new Date(b.timestamp).getTime() || 0) -
-                    (new Date(a.timestamp).getTime() || 0),
-            );
-            setInspections(merged);
+
+            // Keep polling while submissions are still running
+            clearTimeout(pollTimerRef.current);
+            if (subs.some(s => ACTIVE_STATUSES.has(s.status))) {
+                pollTimerRef.current = setTimeout(() => { void refresh(); }, POLL_INTERVAL_MS);
+            }
         } catch {
-            setInspections(getAllInspections());
+            // ignore transient fetch errors
         }
     }, [projectId]);
 
     useEffect(() => {
-        const local = getAllInspections();
-        if (local.length > 0) setInspections(local);
-        refresh();
-        const handleUpdate = () => {
-            const local = getAllInspections();
-            if (!projectId) {
-                setInspections(local);
-                return;
-            }
-            setInspections((prev) => {
-                const byId = new Map(prev.map((i) => [i.id, i]));
-                local.forEach((i) => byId.set(i.id, i));
-                return Array.from(byId.values()).sort(
-                    (a, b) =>
-                        (new Date(b.timestamp).getTime() || 0) -
-                        (new Date(a.timestamp).getTime() || 0),
-                );
-            });
-            refresh();
+        mountedRef.current = true;
+        void refresh();
+        const handler = () => { void refresh(); };
+        globalThis.addEventListener(SUBMISSION_UPLOADED_EVENT, handler);
+        return () => {
+            mountedRef.current = false;
+            clearTimeout(pollTimerRef.current);
+            globalThis.removeEventListener(SUBMISSION_UPLOADED_EVENT, handler);
         };
-        globalThis.addEventListener(INSPECTION_UPDATE_EVENT, handleUpdate);
-        return () => globalThis.removeEventListener(INSPECTION_UPDATE_EVENT, handleUpdate);
-    }, [refresh, projectId]);
+    }, [refresh]);
 
-    return { inspections, refresh };
+    return { submissions, imageUrls, refresh };
 }

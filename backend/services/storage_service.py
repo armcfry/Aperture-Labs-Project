@@ -91,7 +91,6 @@ async def upload_image(
 
     # Trigger detection pipeline
     detection_service.trigger_detection(
-        db=db,
         submission_id=submission.id,
         project_id=project_id,
         image_object_key=object_key,

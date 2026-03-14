@@ -1,12 +1,121 @@
+import io
+import logging
+import threading
 import uuid
 
+from PIL import Image
 from sqlalchemy.orm import Session
 
+from db.models import Submission, Anomaly
+from db.session import SessionLocal
+from models.ollama_vlm import get_model
 from services import minio_client
+from utils.pdf_extract import extract_text_from_pdf
+
+logger = logging.getLogger(__name__)
+
+_SEVERITY_MAP = {
+    "critical": "high",
+    "major": "med",
+    "minor": "low",
+}
+
+
+def _load_image_from_minio(bucket: str, object_name: str) -> Image.Image:
+    data = minio_client.get_file(bucket=bucket, object_name=object_name)
+    image = Image.open(io.BytesIO(data)).convert("RGB")
+    w, h = image.size
+    if max(w, h) > 1024:
+        ratio = min(1024 / w, 1024 / h)
+        image = image.resize((int(w * ratio), int(h * ratio)), Image.Resampling.LANCZOS)
+    return image
+
+
+def _load_spec_text(bucket: str) -> str | None:
+    spec_parts = []
+    for obj_name in minio_client.list_objects(bucket=bucket, prefix="designs/"):
+        if not obj_name.lower().endswith(".pdf"):
+            continue
+        try:
+            data = minio_client.get_file(bucket=bucket, object_name=obj_name)
+            text = extract_text_from_pdf(data)
+            if text.strip():
+                spec_parts.append(text.strip())
+        except Exception:
+            pass
+    return "\n\n---\n\n".join(spec_parts) if spec_parts else None
+
+
+def _build_anomalies(db: Session, submission: Submission, result) -> int:
+    """Create Anomaly rows for a failed detection. Returns anomaly count."""
+    defects = result.defects or []
+    if defects:
+        for defect in defects:
+            db.add(Anomaly(
+                id=uuid.uuid4(),
+                submission_id=submission.id,
+                label=defect.id or "foreign_object",
+                description=defect.description[:500] if defect.description else None,
+                severity=_SEVERITY_MAP.get(defect.severity, "med"),
+                confidence=0.90,
+            ))
+        return len(defects)
+
+    db.add(Anomaly(
+        id=uuid.uuid4(),
+        submission_id=submission.id,
+        label="foreign_object",
+        description=(result.response[:500] if result.response else "FOD detected"),
+        severity="high",
+        confidence=0.90,
+    ))
+    return 1
+
+
+def _mark_failed(db: Session, submission_id: uuid.UUID, exc: Exception) -> None:
+    try:
+        submission = db.get(Submission, submission_id)
+        if submission:
+            submission.status = "failed"
+            submission.error_message = str(exc)[:500]
+            db.commit()
+    except Exception:
+        db.rollback()
+
+
+def _run_detection(submission_id: uuid.UUID, project_id: uuid.UUID, image_object_key: str) -> None:
+    """Background worker: runs VLM detection and writes results to DB."""
+    db: Session = SessionLocal()
+    try:
+        submission = db.get(Submission, submission_id)
+        if not submission:
+            logger.warning("[detection] Submission %s not found", submission_id)
+            return
+
+        submission.status = "running"
+        db.commit()
+
+        bucket = str(project_id)
+        object_name = image_object_key.split("/", 1)[1]  # strip "{project_id}/" prefix
+
+        image = _load_image_from_minio(bucket, object_name)
+        spec_text = _load_spec_text(bucket)
+        result = get_model().detect_fod(image, None, spec_text)
+
+        submission.status = "complete"
+        submission.pass_fail = result.pass_fail
+        submission.anomaly_count = _build_anomalies(db, submission, result) if result.pass_fail == "fail" else 0
+        db.commit()
+        logger.info("[detection] Submission %s complete — %s", submission_id, result.pass_fail.upper())
+
+    except Exception as exc:
+        logger.warning("[detection] Submission %s failed: %s", submission_id, exc)
+        _mark_failed(db, submission_id, exc)
+    finally:
+        db.close()
 
 
 def trigger_detection(
-    db: Session,
     submission_id: uuid.UUID,
     project_id: uuid.UUID,
     image_object_key: str,
@@ -14,32 +123,12 @@ def trigger_detection(
     """
     Entry point for the FOD detection pipeline.
     Called automatically when a new image is uploaded.
-
-    TODO: Implement detection logic here. This function receives:
-      - submission_id: the submission to update with results
-      - project_id: the project the submission belongs to
-      - image_object_key: "{project_id}/images/{filename}" — the image to run detection on
-      - design_object_keys: list of "{project_id}/designs/{filename}" — reference design docs
-
-    Expected implementation steps:
-      1. Fetch image from MinIO using image_object_key
-      2. Fetch design docs from MinIO using design_object_keys
-      3. Run detection model against image + designs
-      4. Update submission status, pass_fail, anomaly_count
-      5. Create Anomaly records for each detected anomaly
+    Runs detection in a background thread so the upload response returns immediately.
     """
-    bucket = str(project_id)
-
-    # List all design docs under {project_id}/designs/
-    design_object_names = minio_client.list_objects(
-        bucket=bucket,
-        prefix="designs/",
+    thread = threading.Thread(
+        target=_run_detection,
+        args=(submission_id, project_id, image_object_key),
+        daemon=True,
     )
-    design_object_keys = [
-        f"{bucket}/{object_name}" for object_name in design_object_names
-    ]
-
-    # Stub — replace with real detection logic
-    print(f"[detection] triggered for submission {submission_id}")
-    print(f"[detection] image: {image_object_key}")
-    print(f"[detection] designs: {design_object_keys}")
+    thread.start()
+    logger.info("[detection] Started background detection for submission %s", submission_id)
