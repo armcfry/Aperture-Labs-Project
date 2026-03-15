@@ -41,12 +41,16 @@ export default function Header() {
         >
             <div className="flex w-full h-full items-center px-6">
                 <div className="w-[400px] flex-shrink-0 flex items-center gap-4">
-                    <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => router.push("/projects")}
+                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                    >
                         <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded flex items-center justify-center">
                             <Activity className="text-white" strokeWidth={2.5} size={18} />
                         </div>
                         <h1 className="text-xl font-bold text-slate-900 dark:text-white">GLaDOS</h1>
-                    </div>
+                    </button>
 
                     {/* Project display or Select Project - hidden on /projects page */}
                     {showProjectArea && (
