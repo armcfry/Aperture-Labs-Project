@@ -50,7 +50,7 @@ export function useInspectionHistory(projectId: string | undefined) {
             // Keep polling while submissions are still running
             clearTimeout(pollTimerRef.current);
             if (subs.some(s => ACTIVE_STATUSES.has(s.status))) {
-                pollTimerRef.current = setTimeout(() => { void refresh(); }, POLL_INTERVAL_MS);
+                pollTimerRef.current = setTimeout(() => { refresh(); }, POLL_INTERVAL_MS);
             }
         } catch {
             // ignore transient fetch errors
@@ -60,7 +60,7 @@ export function useInspectionHistory(projectId: string | undefined) {
     useEffect(() => {
         mountedRef.current = true;
         void refresh();
-        const handler = () => { void refresh(); };
+        const handler = () => { refresh(); };
         globalThis.addEventListener(SUBMISSION_UPLOADED_EVENT, handler);
         return () => {
             mountedRef.current = false;
