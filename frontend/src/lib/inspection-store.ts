@@ -20,6 +20,8 @@ export type InspectionSubmission = {
     analysis: string;
     model?: string;
     inferenceTimeMs?: number;
+    /** Base64 PNG with bounding boxes drawn by Qwen2.5-VL grounding (when detected) */
+    annotatedImage?: string;
 };
 
 export type InspectionResult = {

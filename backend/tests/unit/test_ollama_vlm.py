@@ -7,6 +7,8 @@ from PIL import Image
 from models.ollama_vlm import (
     _parse_pass_fail,
     _parse_defects_from_response,
+    _is_continuation_line,
+    _clean_description,
     get_mock_detection_response,
     OllamaVLM,
     get_model,
@@ -174,6 +176,133 @@ class TestOllamaVLM:
         assert resp.pass_fail == "fail"
         assert resp.defects
         assert "500" in resp.response or "Error" in resp.response
+
+
+class TestIsMetadataLine:
+    """_is_continuation_line should detect metadata regardless of bullet prefix."""
+
+    def test_plain_location_label(self):
+        assert _is_continuation_line("location: near engine") is True
+
+    def test_bullet_prefixed_location(self):
+        assert _is_continuation_line("• location: near engine") is True
+
+    def test_dash_prefixed_confidence(self):
+        assert _is_continuation_line("- confidence score: 0.9") is True
+
+    def test_severity_rating(self):
+        assert _is_continuation_line("severity rating: high") is True
+
+    def test_object_classification(self):
+        assert _is_continuation_line("object classification: bolt") is True
+
+    def test_recommended_action(self):
+        assert _is_continuation_line("recommended action: remove immediately") is True
+
+    def test_approximate_location(self):
+        assert _is_continuation_line("approximate location: 20% x, 50% y") is True
+
+    def test_normal_defect_line_not_metadata(self):
+        assert _is_continuation_line("loose bolt found on runway") is False
+
+    def test_article_prefixed_confidence(self):
+        assert _is_continuation_line("the confidence score for this detection is 1.0") is True
+
+
+class TestCleanDescription:
+    def test_strips_object_classification_prefix(self):
+        assert _clean_description("Object classification: Bolt") == "Bolt"
+
+    def test_strips_severity_rating_prefix(self):
+        assert _clean_description("Severity rating: HIGH") == "HIGH"
+
+    def test_strips_confidence_score_prefix(self):
+        assert _clean_description("Confidence score: 1.0") == "1.0"
+
+    def test_strips_location_prefix(self):
+        assert _clean_description("Location: upper left") == "upper left"
+
+    def test_no_prefix_unchanged(self):
+        assert _clean_description("bolt on runway") == "bolt on runway"
+
+
+class TestParseDefectsMetadataFiltering:
+    """Metadata bullets must not become separate defect entries."""
+
+    def test_skips_confidence_score_bullet(self):
+        text = (
+            "CRITICAL FAILURES:\n"
+            "• Bolt detected on runway\n"
+            "• Confidence score: 1.0\n"
+        )
+        defects = _parse_defects_from_response(text)
+        assert len(defects) == 1
+        assert "bolt" in defects[0].description.lower()
+
+    def test_skips_object_classification_bullet(self):
+        text = (
+            "CRITICAL FAILURES:\n"
+            "• Object classification: Bolt\n"
+        )
+        defects = _parse_defects_from_response(text)
+        # Object classification bullets are metadata — result should be empty or fallback
+        descriptions = [d.description.lower() for d in defects]
+        assert not any("object classification" in d for d in descriptions)
+
+    def test_skips_severity_rating_bullet(self):
+        text = (
+            "MAJOR ISSUES:\n"
+            "• Rubber debris on apron\n"
+            "• Severity rating: HIGH\n"
+        )
+        defects = _parse_defects_from_response(text)
+        descriptions = [d.description.lower() for d in defects]
+        assert not any("severity rating" in d for d in descriptions)
+
+    def test_skips_recommended_action_bullet(self):
+        text = (
+            "MAJOR ISSUES:\n"
+            "• Metal fragment near taxiway\n"
+            "• Recommended action: remove immediately\n"
+        )
+        defects = _parse_defects_from_response(text)
+        descriptions = [d.description.lower() for d in defects]
+        assert not any("recommended action" in d for d in descriptions)
+
+    def test_sentence_form_confidence_score_skipped(self):
+        """'The confidence score for this detection is 1.0' must not become a defect."""
+        text = (
+            "CRITICAL FAILURES:\n"
+            "• Bolt is a critical hazard\n"
+            "• The confidence score for this detection is 1.0\n"
+        )
+        defects = _parse_defects_from_response(text)
+        descriptions = [d.description.lower() for d in defects]
+        assert not any("confidence score" in d for d in descriptions)
+
+    def test_multiple_metadata_bullets_produce_single_defect(self):
+        text = (
+            "CRITICAL FAILURES:\n"
+            "• Loose hardware detected\n"
+            "• Object classification: Bolt\n"
+            "• Approximate location: 20% X, 50% Y\n"
+            "• Severity rating: HIGH\n"
+            "• Confidence score: 1.0\n"
+            "• Recommended action: remove\n"
+        )
+        defects = _parse_defects_from_response(text)
+        assert len(defects) == 1
+        assert "hardware" in defects[0].description.lower()
+
+    def test_description_cleaned_of_metadata_prefix(self):
+        text = (
+            "CRITICAL FAILURES:\n"
+            "• Object classification: Loose bolt\n"
+        )
+        defects = _parse_defects_from_response(text)
+        # Either filtered out entirely, or prefix stripped
+        for d in defects:
+            assert not d.description.lower().startswith("object classification")
 
 
 class TestGetModel:

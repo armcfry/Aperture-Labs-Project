@@ -595,13 +595,37 @@ export default function InspectResultPage() {
                                     <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                                         Product Image
                                     </h3>
-                                    <div className="relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 min-w-0 print-report-image">
-                                        <img
-                                            src={submission.productPhoto}
-                                            alt={`Product ${submissionIndex + 1}`}
-                                            className="w-full max-w-full h-auto object-contain"
-                                        />
-                                    </div>
+                                    {submission.annotatedImage ? (
+                                        <div className="space-y-3">
+                                            <div className="relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-blue-300 dark:border-blue-600 min-w-0 print-report-image">
+                                                <img
+                                                    src={`data:image/png;base64,${submission.annotatedImage}`}
+                                                    alt={`Annotated product ${submissionIndex + 1} with bounding boxes`}
+                                                    className="w-full max-w-full h-auto object-contain"
+                                                />
+                                            </div>
+                                            <details className="group">
+                                                <summary className="cursor-pointer text-sm text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200 select-none">
+                                                    View original image
+                                                </summary>
+                                                <div className="mt-2 relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 min-w-0">
+                                                    <img
+                                                        src={submission.productPhoto}
+                                                        alt={`Original product ${submissionIndex + 1}`}
+                                                        className="w-full max-w-full h-auto object-contain"
+                                                    />
+                                                </div>
+                                            </details>
+                                        </div>
+                                    ) : (
+                                        <div className="relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 min-w-0 print-report-image">
+                                            <img
+                                                src={submission.productPhoto}
+                                                alt={`Product ${submissionIndex + 1}`}
+                                                className="w-full max-w-full h-auto object-contain"
+                                            />
+                                        </div>
+                                    )}
                                 </section>
 
                                 {/* Detected Defects */}

@@ -116,14 +116,17 @@ export default function InspectPage() {
 
         const projectId = currentProject?.id ?? "";
         const userId = user?.id ?? "";
+        // Run analysis in background
+        const runBackground = async () => {
+            for (let i = 0; i < files.length; i++) {
+                if (!isMountedRef.current) break;
+                setUploadProgress({ current: i + 1, total });
+                await uploadFile(files[i], projectId, userId);
+            }
+            if (isMountedRef.current) setUploadProgress(null);
+        };
 
-        for (let i = 0; i < files.length; i++) {
-            if (!isMountedRef.current) break;
-            setUploadProgress({ current: i + 1, total });
-            await uploadFile(files[i], projectId, userId);
-        }
-
-        if (isMountedRef.current) setUploadProgress(null);
+        void runBackground();
     };
 
     const designSpecs = currentProject?.designSpecs ?? [];
@@ -379,7 +382,7 @@ export default function InspectPage() {
                     {isUploading
                         ? `Uploading ${uploadProgress.current}/${uploadProgress.total}…`
                         : "Start Analysis"}
-on                </button>
+                </button>
             </div>
         </div>
     );

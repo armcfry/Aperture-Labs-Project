@@ -18,3 +18,4 @@ class DetectionResponse(BaseModel):
     pass_fail: str  # "pass" | "fail"
     defects: list[DefectSchema] | None = None  # parsed from response when possible
     prompt_used: str | None = None  # full prompt (generic + spec) sent to the VLM, for display
+    annotated_image: str | None = None  # base64 PNG with bounding boxes drawn (when boxes were detected)
