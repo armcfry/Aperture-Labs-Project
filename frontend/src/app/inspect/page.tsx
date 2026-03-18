@@ -2,23 +2,16 @@
 
 /**
  * Page for creating a new inspection.
- * Supports multiple product photos with batch processing and per-image progress.
- * Styled after AI Anomaly Detection Tool Dashboard.
- * Stays on dashboard after analysis (adds to history, no auto-navigation).
- * Analysis continues in the background if user navigates away; result is saved when done.
+ * Uploads each image to the backend, which stores it in MinIO and triggers
+ * detection automatically. The history sidebar polls the API for live status.
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Image, FileDiff, FileText, X } from "lucide-react";
 import { useApp } from "@/app/AppProvider";
-import { detectFod, listDesignSpecs, getInspectionPrompt } from "@/lib/api";
-import {
-    saveInspectionPlaceholder,
-    updateInspectionProgress,
-    updateInspectionWithResult,
-} from "@/lib/inspection-store";
-import { parseDefectsFromResponse, normalizeSeverityToDefect } from "@/lib/defect-parser";
+import { uploadImage, listDesignSpecs, getInspectionPrompt } from "@/lib/api";
+import { SUBMISSION_UPLOADED_EVENT } from "@/hooks/useInspectionHistory";
 import DesignSpecPreview from "@/components/DesignSpecPreview";
 import { Alert } from "@/components/ui/alert";
 import { DesignSpecLink, type PreviewSpec } from "@/components/DesignSpecLink";
@@ -38,16 +31,13 @@ export default function InspectPage() {
         }
     }, [hasRestoredFromStorage, user, currentProject, router]);
 
-    /** Track mount so we don't setState after navigate-away; analysis still completes in background. */
     const isMountedRef = useRef(true);
     useEffect(() => {
         isMountedRef.current = true;
-        return () => {
-            isMountedRef.current = false;
-        };
+        return () => { isMountedRef.current = false; };
     }, []);
 
-    // Fetch design specs if project has none (e.g. from persisted state or Switch project)
+    // Fetch design specs if project has none
     useEffect(() => {
         if (!currentProject?.id || (currentProject.designSpecs?.length ?? 0) > 0) return;
         const projectId = currentProject.id;
@@ -58,12 +48,13 @@ export default function InspectPage() {
                 }
             })
             .catch(() => {});
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- only refetch when project id changes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentProject?.id]);
+
     const [previewSpec, setPreviewSpec] = useState<PreviewSpec>(null);
     const [productPhotos, setProductPhotos] = useState<File[]>([]);
     const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-    const [startedMessage, setStartedMessage] = useState<string | null>(null);
+    const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [promptPopupOpen, setPromptPopupOpen] = useState(false);
     const [promptContent, setPromptContent] = useState("");
@@ -99,160 +90,47 @@ export default function InspectPage() {
         setError(null);
     }, [previewUrls]);
 
-    const MOCK_RESPONSE = `INSPECTION SUMMARY (Mock - API unavailable)
-
-Specification: Design specs
-Images Analyzed: 1
-Defects Detected: 2 anomalies found
-Status: FAIL - Defects present
-
-CRITICAL FAILURES:
-• Surface Integrity: Foreign object detected
-  - Location: Upper-left quadrant
-  - Recommended Action: Reject and rework
-
-MAJOR ISSUES:
-• Debris detected at center region
-  - Recommended Action: Quality review required
-
-RECOMMENDATION: Product does not meet manufacturing specifications. Immediate rework required.`;
-
-    /** Convert File to base64 data URL so it persists across refresh/navigation (blob URLs break) */
-    const fileToDataUrl = useCallback((file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
+    const uploadFile = useCallback(async (file: File, projectId: string, userId: string) => {
+        try {
+            await uploadImage(projectId, userId, file);
+            globalThis.dispatchEvent(new CustomEvent(SUBMISSION_UPLOADED_EVENT));
+        } catch (err) {
+            if (isMountedRef.current) {
+                setError(`"${file.name}": ${err instanceof Error ? err.message : "Upload failed"}`);
+            }
+        }
     }, []);
 
     const handleRunInspection = async () => {
         if (productPhotos.length === 0) return;
         setError(null);
-        setStartedMessage(null);
 
-        const designSpecs = currentProject?.designSpecs ?? [];
-        const total = productPhotos.length;
-        const filesToAnalyze = [...productPhotos];
+        const files = [...productPhotos];
+        const total = files.length;
 
-        // Build data URLs for placeholder thumbnails
-        const placeholderSubs: Array<{ productPhoto: string; photoName: string }> = [];
-        for (const file of productPhotos) {
-            const dataUrl = await fileToDataUrl(file);
-            placeholderSubs.push({ productPhoto: dataUrl, photoName: file.name });
-        }
-
-        const placeholderId = saveInspectionPlaceholder({
-            projectId: currentProject?.id,
-            projectName: currentProject?.name,
-            designSpecs,
-            submissions: placeholderSubs,
-        });
-
-        // Show placeholder in history immediately; clear form so user can start another
-        setStartedMessage(`Analysis started. View progress in History.`);
+        // Clear form immediately so user can queue another batch
         previewUrls.forEach((u) => URL.revokeObjectURL(u));
         setProductPhotos([]);
         setPreviewUrls([]);
+        setUploadProgress({ current: 0, total });
 
+        const projectId = currentProject?.id ?? "";
+        const userId = user?.id ?? "";
         // Run analysis in background
         const runBackground = async () => {
-            const submissions: Array<{
-                timestamp: string;
-                productPhoto: string;
-                photoName: string;
-                designSpec: string[];
-                status: "pass" | "fail";
-                defects: ReturnType<typeof parseDefectsFromResponse>;
-                analysis: string;
-                model?: string;
-                inferenceTimeMs?: number;
-                annotatedImage?: string;
-            }> = [];
-
-            for (let i = 0; i < filesToAnalyze.length; i++) {
-                const file = filesToAnalyze[i];
-                const productPhoto = placeholderSubs[i]?.productPhoto ?? (await fileToDataUrl(file));
-
-                try {
-                    const result = await detectFod(file, currentProject?.id);
-                    const defects =
-                        result.defects && result.defects.length > 0
-                            ? result.defects.map((d) => ({
-                                  id: d.id,
-                                  severity: normalizeSeverityToDefect(d.severity),
-                                  description: d.description,
-                              }))
-                            : parseDefectsFromResponse(result.response);
-                    const status: "pass" | "fail" =
-                        result.pass_fail ??
-                        (defects.some((d) => d.severity === "critical") ||
-                        result.response.toLowerCase().includes("fail")
-                            ? "fail"
-                            : "pass");
-
-                    submissions.push({
-                        timestamp: new Date().toISOString(),
-                        productPhoto,
-                        photoName: file.name,
-                        designSpec: designSpecs,
-                        status,
-                        defects,
-                        analysis: result.response,
-                        model: result.model,
-                        inferenceTimeMs: result.inference_time_ms,
-                        annotatedImage: result.annotated_image ?? undefined,
-                    });
-                } catch (err) {
-                    const msg = err instanceof Error ? err.message : "Detection failed";
-                    if (isMountedRef.current) setError(`Image "${file.name}": ${msg}. Using mock data.`);
-                    const defects = parseDefectsFromResponse(MOCK_RESPONSE);
-                    submissions.push({
-                        timestamp: new Date().toISOString(),
-                        productPhoto,
-                        photoName: file.name,
-                        designSpec: designSpecs,
-                        status: "fail",
-                        defects,
-                        analysis: MOCK_RESPONSE,
-                        model: "mock (offline)",
-                        inferenceTimeMs: 0,
-                    });
-                }
-
-                const processed = submissions.length;
-                if (isMountedRef.current) {
-                    const pct = Math.round((processed / total) * 100);
-                    updateInspectionProgress(placeholderId, pct);
-                }
+            for (let i = 0; i < files.length; i++) {
+                if (!isMountedRef.current) break;
+                setUploadProgress({ current: i + 1, total });
+                await uploadFile(files[i], projectId, userId);
             }
-
-            const first = submissions[0];
-            if (!first) return;
-            updateInspectionWithResult(placeholderId, {
-                imageUrl: first.productPhoto,
-                response: first.analysis,
-                model: first.model,
-                inferenceTimeMs: first.inferenceTimeMs,
-                timestamp: first.timestamp,
-                projectId: currentProject?.id,
-                projectName: currentProject?.name,
-                submissions: submissions.map((s, idx) => ({
-                    ...s,
-                    id: `${placeholderId}-sub-${idx}`,
-                })),
-            });
-            if (isMountedRef.current) {
-                setStartedMessage(null);
-                setError(null);
-            }
+            if (isMountedRef.current) setUploadProgress(null);
         };
 
         void runBackground();
     };
 
     const designSpecs = currentProject?.designSpecs ?? [];
+    const isUploading = uploadProgress !== null;
 
     const handleOpenPromptPopup = useCallback(() => {
         setPromptPopupOpen(true);
@@ -311,7 +189,7 @@ RECOMMENDATION: Product does not meet manufacturing specifications. Immediate re
                     </div>
                 )}
 
-                {/* View inspection prompt (PDF + generic) */}
+                {/* View inspection prompt */}
                 <div className="mb-6">
                     <button
                         type="button"
@@ -335,19 +213,13 @@ RECOMMENDATION: Product does not meet manufacturing specifications. Immediate re
                 {promptPopupOpen && (
                     <div
                         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-                        onClick={(e) => {
-                            if (e.target === e.currentTarget) setPromptPopupOpen(false);
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === "Escape") setPromptPopupOpen(false);
-                        }}
+                        onClick={(e) => { if (e.target === e.currentTarget) setPromptPopupOpen(false); }}
+                        onKeyDown={(e) => { if (e.key === "Escape") setPromptPopupOpen(false); }}
                         role="dialog"
                         aria-modal="true"
                         aria-label="Inspection prompt"
                     >
-                        <div
-                            className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col border border-slate-200 dark:border-zinc-700"
-                        >
+                        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col border border-slate-200 dark:border-zinc-700">
                             <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-zinc-700">
                                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                                     Inspection prompt (PDF + generic)
@@ -365,9 +237,7 @@ RECOMMENDATION: Product does not meet manufacturing specifications. Immediate re
                                 {promptLoading && (
                                     <p className="text-slate-500 dark:text-zinc-400">Loading prompt…</p>
                                 )}
-                                {promptError && (
-                                    <Alert variant="error">{promptError}</Alert>
-                                )}
+                                {promptError && <Alert variant="error">{promptError}</Alert>}
                                 {!promptLoading && !promptError && promptContent && (
                                     <pre className="text-sm text-slate-700 dark:text-zinc-300 whitespace-pre-wrap font-sans break-words">
                                         {promptContent}
@@ -449,8 +319,7 @@ RECOMMENDATION: Product does not meet manufacturing specifications. Immediate re
                                         <button
                                             type="button"
                                             onClick={() => removeProductPhoto(index)}
-                                            disabled={productPhotos.length === 0}
-                                            className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-lg opacity-0 group-hover/photo:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50"
+                                            className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-lg opacity-0 group-hover/photo:opacity-100 transition-opacity hover:bg-red-600"
                                             title="Remove"
                                         >
                                             <X className="w-4 h-4" />
@@ -464,15 +333,14 @@ RECOMMENDATION: Product does not meet manufacturing specifications. Immediate re
                             <div className="flex gap-2">
                                 <label
                                     htmlFor="product-photo-add"
-                                    className="flex-1 bg-slate-200 dark:bg-zinc-700 hover:bg-slate-300 dark:hover:bg-zinc-600 text-slate-900 dark:text-white px-4 py-2 rounded-lg font-medium cursor-pointer transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 bg-slate-200 dark:bg-zinc-700 hover:bg-slate-300 dark:hover:bg-zinc-600 text-slate-900 dark:text-white px-4 py-2 rounded-lg font-medium cursor-pointer transition-colors text-center"
                                 >
                                     Add More Photos
                                 </label>
                                 <button
                                     type="button"
                                     onClick={clearAllPhotos}
-                                    disabled={productPhotos.length === 0}
-                                    className="bg-red-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+                                    className="bg-red-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-600 transition-colors"
                                 >
                                     Clear All
                                 </button>
@@ -495,23 +363,25 @@ RECOMMENDATION: Product does not meet manufacturing specifications. Immediate re
                     </Alert>
                 )}
 
-                {/* Start Analysis Button */}
-                {startedMessage && (
+                {isUploading && (
                     <div className="mt-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-800 dark:text-blue-200 text-sm">
-                        {startedMessage}
+                        Uploading {uploadProgress.current} of {uploadProgress.total}… check the History panel for live progress.
                     </div>
                 )}
+
                 <button
                     type="button"
                     onClick={handleRunInspection}
-                    disabled={productPhotos.length === 0}
+                    disabled={productPhotos.length === 0 || isUploading}
                     className={`w-full font-semibold py-4 px-6 rounded-xl transition-all disabled:cursor-not-allowed shadow-sm mt-8 ${
-                        productPhotos.length
+                        productPhotos.length > 0 && !isUploading
                             ? "bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 hover:dark:bg-blue-600 text-white"
                             : "bg-slate-300 dark:bg-zinc-800 text-slate-500 dark:text-zinc-600"
                     }`}
                 >
-                    Start Analysis
+                    {isUploading
+                        ? `Uploading ${uploadProgress.current}/${uploadProgress.total}…`
+                        : "Start Analysis"}
                 </button>
             </div>
         </div>
