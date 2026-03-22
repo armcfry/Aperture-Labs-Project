@@ -164,7 +164,7 @@ class Submission(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'complete', 'complete_with_errors', 'failed')",
+            "status IN ('queued', 'running', 'complete', 'failed', 'error', 'timeout')",
             name="submissions_status_check",
         ),
         CheckConstraint(

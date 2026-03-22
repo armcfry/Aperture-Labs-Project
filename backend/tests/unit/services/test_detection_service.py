@@ -2,6 +2,7 @@
 import io
 import uuid
 import pytest
+import requests
 from unittest.mock import MagicMock, patch
 
 from PIL import Image
@@ -104,7 +105,7 @@ class TestRunDetection:
         result = _make_result(pass_fail="fail", defects=[defect], response="RESULT: FAIL")
         self._call(submission=submission, result=result)
 
-        assert submission.status == "complete"
+        assert submission.status == "failed"
         assert submission.pass_fail == "fail"
         assert submission.anomaly_count == 1
 
@@ -134,7 +135,35 @@ class TestRunDetection:
             mock_load_img.assert_not_called()
             mock_get_model.assert_not_called()
 
-    def test_exception_marks_submission_failed(self):
+    def test_timeout_marks_submission_timeout(self):
+        submission = _make_submission()
+        mock_db = MagicMock()
+        mock_db.get.return_value = submission
+
+        with (
+            patch("services.detection_service.SessionLocal", return_value=mock_db),
+            patch("services.detection_service._load_image_from_minio", side_effect=requests.exceptions.Timeout()),
+            patch("services.detection_service.minio_client"),
+        ):
+            detection_service._run_detection(SUBMISSION_ID, PROJECT_ID, IMAGE_KEY)
+
+        assert submission.status == "timeout"
+        assert "timed out" in submission.error_message
+
+    def test_db_closed_on_timeout(self):
+        mock_db = MagicMock()
+        mock_db.get.return_value = _make_submission()
+
+        with (
+            patch("services.detection_service.SessionLocal", return_value=mock_db),
+            patch("services.detection_service._load_image_from_minio", side_effect=requests.exceptions.Timeout()),
+            patch("services.detection_service.minio_client"),
+        ):
+            detection_service._run_detection(SUBMISSION_ID, PROJECT_ID, IMAGE_KEY)
+
+        mock_db.close.assert_called_once()
+
+    def test_exception_marks_submission_error(self):
         submission = _make_submission()
         mock_db = MagicMock()
         mock_db.get.return_value = submission
@@ -146,7 +175,7 @@ class TestRunDetection:
         ):
             detection_service._run_detection(SUBMISSION_ID, PROJECT_ID, IMAGE_KEY)
 
-        assert submission.status == "failed"
+        assert submission.status == "error"
         assert "minio down" in submission.error_message
 
     def test_db_session_always_closed(self):
@@ -405,7 +434,7 @@ class TestMarkFailed:
 
         detection_service._mark_failed(mock_db, SUBMISSION_ID, RuntimeError("something broke"))
 
-        assert submission.status == "failed"
+        assert submission.status == "error"
         assert "something broke" in submission.error_message
         mock_db.commit.assert_called_once()
 
@@ -432,5 +461,36 @@ class TestMarkFailed:
 
         # Should not raise
         detection_service._mark_failed(mock_db, SUBMISSION_ID, RuntimeError("original error"))
+
+        mock_db.rollback.assert_called_once()
+
+
+class TestMarkTimeout:
+
+    def test_sets_status_and_error_message(self):
+        submission = _make_submission()
+        mock_db = MagicMock()
+        mock_db.get.return_value = submission
+
+        detection_service._mark_timeout(mock_db, SUBMISSION_ID)
+
+        assert submission.status == "timeout"
+        assert submission.error_message is not None
+        mock_db.commit.assert_called_once()
+
+    def test_no_submission_does_not_raise(self):
+        mock_db = MagicMock()
+        mock_db.get.return_value = None
+
+        detection_service._mark_timeout(mock_db, SUBMISSION_ID)
+
+        mock_db.commit.assert_not_called()
+
+    def test_db_exception_does_not_propagate(self):
+        mock_db = MagicMock()
+        mock_db.get.side_effect = Exception("db offline")
+
+        # Should not raise
+        detection_service._mark_timeout(mock_db, SUBMISSION_ID)
 
         mock_db.rollback.assert_called_once()

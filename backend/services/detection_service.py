@@ -3,6 +3,8 @@ import logging
 import threading
 import uuid
 
+import requests
+
 from PIL import Image
 from sqlalchemy.orm import Session
 
@@ -76,8 +78,19 @@ def _mark_failed(db: Session, submission_id: uuid.UUID, exc: Exception) -> None:
     try:
         submission = db.get(Submission, submission_id)
         if submission:
-            submission.status = "failed"
+            submission.status = "error"
             submission.error_message = str(exc)[:500]
+            db.commit()
+    except Exception:
+        db.rollback()
+
+
+def _mark_timeout(db: Session, submission_id: uuid.UUID) -> None:
+    try:
+        submission = db.get(Submission, submission_id)
+        if submission:
+            submission.status = "timeout"
+            submission.error_message = "Detection timed out with no response from the model."
             db.commit()
     except Exception:
         db.rollback()
@@ -102,12 +115,15 @@ def _run_detection(submission_id: uuid.UUID, project_id: uuid.UUID, image_object
         spec_text = _load_spec_text(bucket)
         result = get_model().detect_fod(image, None, spec_text)
 
-        submission.status = "complete"
+        submission.status = "complete" if result.pass_fail == "pass" else "failed"
         submission.pass_fail = result.pass_fail
         submission.anomaly_count = _build_anomalies(db, submission, result) if result.pass_fail == "fail" else 0
         db.commit()
         logger.info("[detection] Submission %s complete — %s", submission_id, result.pass_fail.upper())
 
+    except requests.exceptions.Timeout:
+        logger.warning("[detection] Submission %s timed out", submission_id)
+        _mark_timeout(db, submission_id)
     except Exception as exc:
         logger.warning("[detection] Submission %s failed: %s", submission_id, exc)
         _mark_failed(db, submission_id, exc)

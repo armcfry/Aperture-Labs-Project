@@ -15,7 +15,7 @@ export type InspectionSubmission = {
     productPhoto: string;
     photoName: string;
     designSpec: string[];
-    status: "pass" | "fail" | "pending" | "analyzing";
+    status: "pass" | "fail" | "pending" | "analyzing" | "error" | "timeout";
     defects: Defect[];
     analysis: string;
     model?: string;

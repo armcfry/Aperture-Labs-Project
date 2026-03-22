@@ -29,13 +29,16 @@ function StatusBadge({ sub }: Readonly<{ sub: ApiSubmission }>) {
     if (sub.status === "queued") {
         return <span className="text-xs text-slate-400 dark:text-zinc-500 flex-shrink-0">QUEUED</span>;
     }
-    if (sub.status === "failed") {
-        return <span className="text-xs font-medium text-red-500 flex-shrink-0">FAILED</span>;
+    if (sub.status === "error") {
+        return <span className="text-xs font-medium text-orange-500 flex-shrink-0">ERROR</span>;
+    }
+    if (sub.status === "timeout") {
+        return <span className="text-xs font-medium text-amber-500 flex-shrink-0">TIMEOUT</span>;
     }
     if (sub.pass_fail === "pass") {
         return <span className="text-xs font-medium text-green-500 flex-shrink-0">PASS</span>;
     }
-    return <span className="text-xs font-medium text-red-500 flex-shrink-0">FAIL</span>;
+    return <span className="text-xs font-medium text-red-500 flex-shrink-0">FAILED</span>;
 }
 
 export default function InspectHistorySidebar() {

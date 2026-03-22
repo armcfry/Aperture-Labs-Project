@@ -73,7 +73,7 @@ CREATE TABLE submissions (
         ON DELETE RESTRICT,
 
     CONSTRAINT submissions_status_check
-        CHECK (status IN ('queued', 'running', 'complete', 'complete_with_errors', 'failed')),
+        CHECK (status IN ('queued', 'running', 'complete', 'failed', 'error', 'timeout')),
 
     CONSTRAINT submissions_pass_fail_check
         CHECK (pass_fail IN ('pass', 'fail', 'unknown')),
