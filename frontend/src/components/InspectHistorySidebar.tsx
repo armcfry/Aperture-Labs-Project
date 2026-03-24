@@ -6,12 +6,13 @@
  * Each submission is shown as an individual card with live status badges.
  */
 
-import React from "react";
+import React, { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { History as HistoryIcon, Plus } from "lucide-react";
 import { useApp } from "@/app/AppProvider";
-import { useInspectionHistory } from "@/hooks/useInspectionHistory";
+import { useInspectionHistory, type StatusChangeEvent } from "@/hooks/useInspectionHistory";
+import { useToast } from "@/context/ToastContext";
 import { formatDateShort, formatTimeShort } from "@/lib/utils";
 import type { ApiSubmission } from "@/lib/api";
 
@@ -44,7 +45,40 @@ function StatusBadge({ sub }: Readonly<{ sub: ApiSubmission }>) {
 export default function InspectHistorySidebar() {
     const router = useRouter();
     const { currentProject } = useApp();
-    const { submissions, imageUrls } = useInspectionHistory(currentProject?.id ?? undefined);
+    const { addToast } = useToast();
+
+    const handleStatusChange = useCallback(
+        ({ submission, previousStatus, currentStatus }: StatusChangeEvent) => {
+            const filename = submission.image_id.split("/").pop() ?? submission.image_id;
+            const wasActive = ACTIVE_STATUSES.has(previousStatus);
+
+            // Req 9: Notify user of active jobs (new submission queued/running)
+            if (previousStatus === "__new__" && ACTIVE_STATUSES.has(currentStatus)) {
+                addToast("Inspection submitted", { description: filename, variant: "info" });
+                return;
+            }
+
+            if (!wasActive) return;
+
+            // Req 6: Notify user of completed jobs
+            if (submission.pass_fail === "pass") {
+                addToast("Inspection complete — PASS", { description: filename, variant: "success" });
+            // Req 8: Notify user of failed jobs
+            } else if (currentStatus === "timeout") {
+                addToast("Inspection timed out", { description: filename, variant: "warning" });
+            } else if (currentStatus === "error") {
+                addToast("Inspection error", { description: filename, variant: "error" });
+            } else {
+                addToast("Inspection failed — FAIL", { description: filename, variant: "error" });
+            }
+        },
+        [addToast],
+    );
+
+    const { submissions, imageUrls } = useInspectionHistory(
+        currentProject?.id ?? undefined,
+        handleStatusChange,
+    );
 
     const handleView = (sub: ApiSubmission) => {
         router.push(`/inspect/result/api-${sub.id}`);
