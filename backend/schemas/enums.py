@@ -11,8 +11,9 @@ class SubmissionStatus(str, Enum):
     queued = "queued"
     running = "running"
     complete = "complete"
-    complete_with_errors = "complete_with_errors"
     failed = "failed"
+    error = "error"
+    timeout = "timeout"
 
 
 class SubmissionPassFail(str, Enum):

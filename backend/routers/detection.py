@@ -10,6 +10,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from PIL import Image
 
 from models.ollama_vlm import get_model, get_mock_detection_response
+from models.owlv2 import get_owlv2_detector, build_queries_and_severity_map, image_to_base64
 from schemas.detection import DetectionResponse
 from services import minio_client
 from utils.file_validation import MAX_IMAGE_UPLOAD_BYTES, is_image
@@ -59,6 +60,36 @@ def get_inspection_prompt(project_id: str | None = None):
     return {"prompt": prompt}
 
 
+def _prepare_image(contents: bytes) -> Image.Image:
+    """Open, normalise to RGB, and downscale to 1024 px max dimension."""
+    try:
+        image = Image.open(io.BytesIO(contents))
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        max_size = 1024
+        w, h = image.size
+        if w > max_size or h > max_size:
+            ratio = min(max_size / w, max_size / h)
+            image = image.resize((int(w * ratio), int(h * ratio)), Image.Resampling.LANCZOS)
+        return image
+    except Exception:
+        logger.exception("Could not process image")
+        raise HTTPException(status_code=400, detail="Could not process image")
+
+
+def _annotate_with_owlv2(result: DetectionResponse, image: Image.Image) -> None:
+    """Attempt OWLv2 bounding-box annotation in-place; silently skips on failure."""
+    if not result.defects:
+        return
+    try:
+        queries, severity_map = build_queries_and_severity_map(result.defects)
+        if queries:
+            annotated = get_owlv2_detector().annotate(image, queries, severity_map)
+            result.annotated_image = image_to_base64(annotated)
+    except Exception:
+        logger.exception("OWLv2 annotation failed — returning result without bounding boxes")
+
+
 @detect_router.post(
     "",
     response_model=DetectionResponse,
@@ -92,27 +123,16 @@ async def detect_fod(
     if not is_image(contents):
         raise HTTPException(status_code=400, detail="File content is not a valid PNG or JPEG image")
 
-    try:
-        image = Image.open(io.BytesIO(contents))
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-        max_size = 1024
-        w, h = image.size
-        if w > max_size or h > max_size:
-            ratio = min(max_size / w, max_size / h)
-            new_size = (int(w * ratio), int(h * ratio))
-            image = image.resize(new_size, Image.Resampling.LANCZOS)
-    except Exception:
-        logger.exception("Could not process image")
-        raise HTTPException(status_code=400, detail="Could not process image")
-
+    image = _prepare_image(contents)
     spec_text = _load_spec_text_for_project(project_id) if project_id else ""
 
-    model = get_model()
     try:
-        return model.detect_fod(image, None, spec_text or None)
+        result = get_model().detect_fod(image, None, spec_text or None)
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
         return get_mock_detection_response()
     except Exception:
         logger.exception("Detection failed")
         raise HTTPException(status_code=500, detail="Detection failed")
+
+    _annotate_with_owlv2(result, image)
+    return result

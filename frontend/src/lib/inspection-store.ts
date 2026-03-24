@@ -15,11 +15,13 @@ export type InspectionSubmission = {
     productPhoto: string;
     photoName: string;
     designSpec: string[];
-    status: "pass" | "fail" | "pending";
+    status: "pass" | "fail" | "pending" | "analyzing" | "error" | "timeout";
     defects: Defect[];
     analysis: string;
     model?: string;
     inferenceTimeMs?: number;
+    /** Base64 PNG with bounding boxes drawn by Qwen2.5-VL grounding (when detected) */
+    annotatedImage?: string;
 };
 
 export type InspectionResult = {
@@ -90,7 +92,6 @@ export function saveInspectionBatch(params: {
         ...s,
         id: `${id}-sub-${i}`,
     }));
-    const overallStatus = subs.some((s) => s.status === "fail") ? "fail" : "pass";
     const first = subs[0];
     const result: InspectionResult = {
         id,
@@ -157,11 +158,41 @@ export function saveInspectionPlaceholder(params: {
 /** Update progress (0-100) for a running inspection. */
 export function updateInspectionProgress(id: string, progress: number): void {
     const store = getStore();
-    const entry = store[id];
+    // Fall back to memoryCache if the entry was never persisted (e.g. quota exceeded)
+    const entry = store[id] ?? memoryCache[id];
     if (!entry || entry.status !== "running") return;
-    store[id] = { ...entry, progress: Math.min(100, Math.max(0, progress)) };
+    const updated = { ...entry, progress: Math.min(100, Math.max(0, progress)) };
+    store[id] = updated;
     setStore(store);
-    if (memoryCache[id]) memoryCache[id] = store[id];
+    memoryCache[id] = updated;
+    if (globalThis.window !== undefined) {
+        globalThis.dispatchEvent(new CustomEvent(INSPECTION_UPDATE_EVENT));
+    }
+}
+
+/** Update a single submission within a running batch (e.g. mark as analyzing, or set final result). */
+export function updateSubmissionResult(
+    batchId: string,
+    subId: string,
+    update: {
+        status: "analyzing" | "pass" | "fail";
+        defects?: Defect[];
+        analysis?: string;
+        model?: string;
+        inferenceTimeMs?: number;
+    }
+): void {
+    const store = getStore();
+    // Fall back to memoryCache if the batch was not persisted to sessionStorage
+    const entry = store[batchId] ?? memoryCache[batchId];
+    if (!entry?.submissions) return;
+    const subs = entry.submissions.map((s) =>
+        s.id === subId ? { ...s, ...update, defects: update.defects ?? s.defects } : s
+    );
+    const updated = { ...entry, submissions: subs };
+    store[batchId] = updated;
+    setStore(store);
+    memoryCache[batchId] = updated;
     if (globalThis.window !== undefined) {
         globalThis.dispatchEvent(new CustomEvent(INSPECTION_UPDATE_EVENT));
     }
@@ -173,7 +204,8 @@ export function updateInspectionWithResult(
     payload: Omit<InspectionResult, "id" | "status" | "progress">
 ): void {
     const store = getStore();
-    const entry = store[id];
+    // Fall back to memoryCache if the entry was not persisted to sessionStorage
+    const entry = store[id] ?? memoryCache[id];
     if (!entry) return;
     const result: InspectionResult = {
         ...payload,
@@ -201,13 +233,22 @@ export function getInspection(id: string): InspectionResult | null {
 export function getAllInspections(): InspectionResult[] {
     try {
         const store = getStore();
-        return Object.values(store).sort(
+        // Merge sessionStorage with memoryCache so that batches with large
+        // base64 images (which can silently exceed the ~5 MB sessionStorage
+        // quota) are still returned. memoryCache is always up-to-date and
+        // takes priority since every write path updates it.
+        const merged: Record<string, InspectionResult> = { ...store, ...memoryCache };
+        return Object.values(merged).sort(
             (a, b) =>
                 (new Date(b.timestamp).getTime() || 0) -
                 (new Date(a.timestamp).getTime() || 0)
         );
     } catch {
-        return [];
+        return Object.values(memoryCache).sort(
+            (a, b) =>
+                (new Date(b.timestamp).getTime() || 0) -
+                (new Date(a.timestamp).getTime() || 0)
+        );
     }
 }
 

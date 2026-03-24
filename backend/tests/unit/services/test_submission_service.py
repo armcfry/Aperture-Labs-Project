@@ -126,18 +126,6 @@ class TestSubmissionService:
         assert mock_submission.error_message is None
         mock_db.commit.assert_called_once()
 
-    def test_retry_submission_from_complete_with_errors(self):
-        """Test retrying a complete_with_errors submission resets it to queued."""
-        mock_submission = MagicMock()
-        mock_submission.status = SubmissionStatus.complete_with_errors
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_submission
-
-        submission_service.retry_submission(mock_db, uuid.uuid4(), uuid.uuid4())
-
-        assert mock_submission.status == SubmissionStatus.queued
-        mock_db.commit.assert_called_once()
-
     def test_retry_submission_from_queued_raises(self):
         """Test retrying a queued submission raises InvalidStateTransition."""
         mock_submission = MagicMock()

@@ -101,9 +101,9 @@ def retry_submission(
 ) -> Submission:
     submission = get_submission(db, project_id, submission_id)
 
-    if submission.status not in (SubmissionStatus.failed, SubmissionStatus.complete_with_errors):
+    if submission.status not in (SubmissionStatus.failed, SubmissionStatus.error, SubmissionStatus.timeout):
         raise exceptions.InvalidStateTransition(
-            "Only failed or complete_with_errors submissions can be retried"
+            "Only failed, error, or timeout submissions can be retried"
         )
 
     submission.status = SubmissionStatus.queued

@@ -1,6 +1,15 @@
 .PHONY: dev dev-down dev-reset run kill kill-reset test test-unit test-api test-down clean
 
 # -------------------------
+# OS Detection
+# -------------------------
+ifeq ($(OS),Windows_NT)
+    DETECTED_OS := Windows
+else
+    DETECTED_OS := Unix
+endif
+
+# -------------------------
 # Development
 # -------------------------
 
@@ -15,11 +24,23 @@ dev-reset:
 	docker compose up -d
 
 # Run full app locally (Docker + backend + frontend). Requires: Docker, Python 3.12+, Node.js
+ifeq ($(DETECTED_OS),Windows)
+run:
+	.\run.bat
+else
 run:
 	@chmod +x run.sh
 	./run.sh
+endif
 
 # Stop everything: backend (8000), frontend (3998), Ollama (11434), Docker (Postgres + MinIO)
+ifeq ($(DETECTED_OS),Windows)
+kill:
+	.\kill.bat
+
+kill-reset:
+	.\kill.bat -reset
+else
 kill:
 	@lsof -ti :8000 | xargs kill -9 2>/dev/null; true
 	@lsof -ti :3998 | xargs kill -9 2>/dev/null; true
@@ -27,13 +48,13 @@ kill:
 	docker compose down
 	@echo "Stopped app, Ollama, and Docker."
 
-# Stop everything and remove Docker volumes (resets local DB and MinIO data). Next 'make run' starts fresh.
 kill-reset:
 	@lsof -ti :8000 | xargs kill -9 2>/dev/null; true
 	@lsof -ti :3998 | xargs kill -9 2>/dev/null; true
 	@lsof -ti :11434 | xargs kill -9 2>/dev/null; true
 	docker compose down -v
 	@echo "Stopped everything and removed volumes (DB reset)."
+endif
 
 # -------------------------
 # Testing

@@ -50,6 +50,25 @@ function getSeverityColor(severity: string) {
     }
 }
 
+function getSubmissionStatusClass(status: string) {
+    switch (status) {
+        case "pass":    return "bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400";
+        case "error":   return "bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400";
+        case "timeout": return "bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400";
+        default:        return "bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400";
+    }
+}
+
+function getSubmissionStatusLabel(status: string) {
+    switch (status) {
+        case "pass":    return "PASS";
+        case "error":   return "ERROR";
+        case "timeout": return "TIMEOUT";
+        case "fail":    return "FAILED";
+        default:        return status.toUpperCase();
+    }
+}
+
 function getSeverityBadgeColor(severity: string) {
     switch (severity) {
         case "critical":
@@ -78,6 +97,22 @@ function getSeverityIcon(severity: string) {
 
 const API_SUBMISSION_RUNNING_STATUSES = new Set(["running", "queued"]);
 
+function deriveOverallStatus(submissions: InspectionSubmission[]): string {
+    if (submissions.some((s) => s.status === "fail")) return "FAIL";
+    if (submissions.some((s) => s.status === "timeout")) return "TIMEOUT";
+    if (submissions.some((s) => s.status === "error")) return "ERROR";
+    return "PASS";
+}
+
+function getOverallStatusClass(status: string): string {
+    switch (status) {
+        case "FAIL":    return "bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400";
+        case "TIMEOUT": return "bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400";
+        case "ERROR":   return "bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400";
+        default:        return "bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400";
+    }
+}
+
 function buildResultFromApi(
     sub: ApiSubmission,
     anomalies: Awaited<ReturnType<typeof listAnomalies>>,
@@ -96,16 +131,29 @@ function buildResultFromApi(
             .filter(Boolean)
             .join("\n\n") || "No detailed analysis.";
     const isRunning = API_SUBMISSION_RUNNING_STATUSES.has(sub.status);
-    const passFail = isRunning ? "pending" : sub.pass_fail === "unknown" ? "fail" : sub.pass_fail;
+    let submissionStatus: InspectionSubmission["status"];
+    if (isRunning) {
+        submissionStatus = "pending";
+    } else if (sub.status === "error") {
+        submissionStatus = "error";
+    } else if (sub.status === "timeout") {
+        submissionStatus = "timeout";
+    } else {
+        submissionStatus = sub.pass_fail === "unknown" ? "fail" : sub.pass_fail;
+    }
+    const submissionAnalysis =
+        (sub.status === "error" || sub.status === "timeout") && sub.error_message
+            ? sub.error_message
+            : analysis;
     const submission: InspectionSubmission = {
         id: sub.id,
         timestamp: sub.submitted_at,
         productPhoto: imageUrl,
         photoName,
         designSpec: currentProject.designSpecs ?? [],
-        status: passFail as "pass" | "fail" | "pending",
+        status: submissionStatus,
         defects,
-        analysis,
+        analysis: submissionAnalysis,
     };
     const inspectionResult: InspectionResult = {
         id: `api-${sub.id}`,
@@ -151,64 +199,46 @@ export default function InspectResultPage() {
             setNotFound(true);
             return;
         }
-        function tryLoad() {
+        function tryLoad(): boolean {
             const data = getInspection(id);
             if (data) {
                 setResult(data);
-                return;
+                return true;
             }
-            if (id.startsWith("api-") && currentProject?.id) {
-                const submissionId = id.slice(4);
-                const projectId = currentProject.id;
-                Promise.all([getSubmission(projectId, submissionId), listAnomalies(submissionId)])
-                    .then(async ([sub, anomalies]) => {
-                        if (!sub) {
-                            setNotFound(true);
-                            return;
-                        }
-                        let imageUrl = "";
-                        try {
-                            imageUrl = await getImageUrl(sub.image_id);
-                        } catch {
-                            /* ignore */
-                        }
-                        const inspectionResult = buildResultFromApi(
-                            sub,
-                            anomalies ?? [],
-                            currentProject,
-                            imageUrl,
-                        );
-                        setResult(inspectionResult);
-                    })
-                    .catch(() => setNotFound(true));
-                return;
-            }
-            setNotFound(true);
+            return false;
         }
-        tryLoad();
-        // Retry after short delays (handles race where we navigated before store/memory cache was visible)
-        const t1 = setTimeout(() => {
-            const data = getInspection(id);
-            if (data) {
-                setResult(data);
-                setNotFound(false);
-            }
-        }, 100);
+        if (tryLoad()) return;
+
+        if (id.startsWith("api-") && currentProject?.id) {
+            const submissionId = id.slice(4);
+            const projectId = currentProject.id;
+            Promise.all([getSubmission(projectId, submissionId), listAnomalies(submissionId)])
+                .then(async ([sub, anomalies]) => {
+                    if (!sub) {
+                        setNotFound(true);
+                        return;
+                    }
+                    let imageUrl = "";
+                    try {
+                        imageUrl = await getImageUrl(sub.image_id);
+                    } catch {
+                        /* ignore */
+                    }
+                    setResult(buildResultFromApi(sub, anomalies ?? [], currentProject, imageUrl));
+                })
+                .catch(() => setNotFound(true));
+            return;
+        }
+
+        // For local IDs, retry a few times before declaring not found (handles
+        // race between navigation and store/memory-cache visibility).
+        const t1 = setTimeout(() => { tryLoad(); }, 100);
         const t2 = setTimeout(() => {
-            const data = getInspection(id);
-            if (data) {
-                setResult(data);
-                setNotFound(false);
-            }
-        }, 250);
-        // If store updates after we mounted (e.g. save completed), try loading again
-        const onUpdate = () => {
-            const data = getInspection(id);
-            if (data) {
-                setResult(data);
-                setNotFound(false);
-            }
-        };
+            if (!tryLoad()) setNotFound(true);
+        }, 400);
+
+        // Also react to store updates (e.g. analysis completes while we wait)
+        const onUpdate = () => { tryLoad(); };
         globalThis.addEventListener(INSPECTION_UPDATE_EVENT, onUpdate);
         return () => {
             clearTimeout(t1);
@@ -292,26 +322,14 @@ export default function InspectResultPage() {
         globalThis.print();
     };
 
+    useEffect(() => {
+        if (notFound) router.replace("/inspect");
+    }, [notFound, router]);
+
     if (notFound) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-zinc-950 py-12 px-6">
-                <div className="max-w-md text-center">
-                    <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-                    <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-                        Inspection Not Found
-                    </h2>
-                    <p className="text-slate-600 dark:text-zinc-400 mb-6">
-                        This inspection may have expired or the link is invalid. Results are stored
-                        in your session and are cleared when you close the browser.
-                    </p>
-                    <button
-                        onClick={() => router.push("/inspect")}
-                        className="flex items-center gap-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors font-medium"
-                    >
-                        <ChevronLeft className="w-5 h-5" />
-                        Back to New Inspection
-                    </button>
-                </div>
+            <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-zinc-950">
+                <LoadingSpinner label="Redirecting..." />
             </div>
         );
     }
@@ -363,7 +381,9 @@ export default function InspectResultPage() {
             ? submissions[0].designSpec
             : (currentProject?.designSpecs ?? []);
     const today = formatDateLong(result.timestamp);
-    const overallStatus = submissions.some((s) => s.status === "fail") ? "FAIL" : "PASS";
+    const overallStatus = deriveOverallStatus(submissions);
+    const overallStatusClass = getOverallStatusClass(overallStatus);
+
     const totalDefects = submissions.reduce((sum, s) => sum + s.defects.length, 0);
     const criticalCount = submissions.reduce(
         (sum, s) => sum + s.defects.filter((d) => d.severity === "critical").length,
@@ -450,11 +470,7 @@ export default function InspectResultPage() {
                                     <span>{today}</span>
                                 </div>
                                 <div
-                                    className={`inline-block px-3 py-1 rounded-full font-bold text-sm ${
-                                        overallStatus === "FAIL"
-                                            ? "bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400"
-                                            : "bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400"
-                                    }`}
+                                    className={`inline-block px-3 py-1 rounded-full font-bold text-sm ${overallStatusClass}`}
                                 >
                                     {overallStatus}
                                 </div>
@@ -470,6 +486,30 @@ export default function InspectResultPage() {
                                 <FileCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                 Inspection Summary
                             </h2>
+
+                            {overallStatus === "TIMEOUT" && (
+                                <div className="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-200">
+                                    <p className="text-sm font-medium mb-1">
+                                        Result: TIMEOUT — inspection did not complete in time
+                                    </p>
+                                    <p className="text-sm text-amber-700 dark:text-amber-300/90">
+                                        No defect data is available for this submission.
+                                    </p>
+                                </div>
+                            )}
+
+                            {overallStatus === "ERROR" && (
+                                <div className="mb-4 p-4 rounded-lg bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-orange-800 dark:text-orange-200">
+                                    <p className="text-sm font-medium mb-1">
+                                        Result: ERROR — detection system encountered a problem
+                                    </p>
+                                    <p className="text-sm text-orange-700 dark:text-orange-300/90">
+                                        One or more submissions failed due to a system error
+                                        unrelated to FOD detection. Check individual submission
+                                        details for the specific error message.
+                                    </p>
+                                </div>
+                            )}
 
                             {failWithoutDetails && (
                                 <div className="mb-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-200">
@@ -607,14 +647,8 @@ export default function InspectResultPage() {
                                             <span className="text-sm font-normal text-slate-600 dark:text-zinc-400">
                                                 {submission.photoName}
                                             </span>
-                                            <span
-                                                className={`ml-auto text-sm font-medium px-2.5 py-1 rounded-full ${
-                                                    submission.status === "pass"
-                                                        ? "bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400"
-                                                        : "bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400"
-                                                }`}
-                                            >
-                                                {submission.status.toUpperCase()}
+                                            <span className={`ml-auto text-sm font-medium px-2.5 py-1 rounded-full ${getSubmissionStatusClass(submission.status)}`}>
+                                                {getSubmissionStatusLabel(submission.status)}
                                             </span>
                                         </h2>
                                     </div>
@@ -625,13 +659,37 @@ export default function InspectResultPage() {
                                     <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                                         Product Image
                                     </h3>
-                                    <div className="relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 min-w-0 print-report-image">
-                                        <img
-                                            src={submission.productPhoto}
-                                            alt={`Product ${submissionIndex + 1}`}
-                                            className="w-full max-w-full h-auto object-contain"
-                                        />
-                                    </div>
+                                    {submission.annotatedImage ? (
+                                        <div className="space-y-3">
+                                            <div className="relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-blue-300 dark:border-blue-600 min-w-0 print-report-image">
+                                                <img
+                                                    src={`data:image/png;base64,${submission.annotatedImage}`}
+                                                    alt={`Annotated product ${submissionIndex + 1} with bounding boxes`}
+                                                    className="w-full max-w-full h-auto object-contain"
+                                                />
+                                            </div>
+                                            <details className="group">
+                                                <summary className="cursor-pointer text-sm text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200 select-none">
+                                                    View original image
+                                                </summary>
+                                                <div className="mt-2 relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 min-w-0">
+                                                    <img
+                                                        src={submission.productPhoto}
+                                                        alt={`Original product ${submissionIndex + 1}`}
+                                                        className="w-full max-w-full h-auto object-contain"
+                                                    />
+                                                </div>
+                                            </details>
+                                        </div>
+                                    ) : (
+                                        <div className="relative bg-slate-100 dark:bg-zinc-800 rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-700 min-w-0 print-report-image">
+                                            <img
+                                                src={submission.productPhoto}
+                                                alt={`Product ${submissionIndex + 1}`}
+                                                className="w-full max-w-full h-auto object-contain"
+                                            />
+                                        </div>
+                                    )}
                                 </section>
 
                                 {/* Detected Defects */}
