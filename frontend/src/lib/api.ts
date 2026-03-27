@@ -131,6 +131,7 @@ export type ApiSubmission = {
     pass_fail: "pass" | "fail" | "unknown";
     anomaly_count: number | null;
     error_message: string | null;
+    annotated_image: string | null;
 };
 
 export type ApiAnomaly = {

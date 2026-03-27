@@ -160,6 +160,7 @@ class Submission(Base):
     pass_fail: Mapped[str] = mapped_column(String, nullable=False)
     anomaly_count: Mapped[int | None] = mapped_column(Integer)
     error_message: Mapped[str | None] = mapped_column(Text)
+    annotated_image: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
         CheckConstraint(

@@ -154,6 +154,7 @@ function buildResultFromApi(
         status: submissionStatus,
         defects,
         analysis: submissionAnalysis,
+        annotatedImage: sub.annotated_image ?? undefined,
     };
     const inspectionResult: InspectionResult = {
         id: `api-${sub.id}`,

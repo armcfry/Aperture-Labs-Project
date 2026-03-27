@@ -60,6 +60,7 @@ CREATE TABLE submissions (
     pass_fail VARCHAR NOT NULL,
     anomaly_count INT,
     error_message TEXT,
+    annotated_image TEXT,
 
     CONSTRAINT fk_submissions_project
         FOREIGN KEY (project_id)
