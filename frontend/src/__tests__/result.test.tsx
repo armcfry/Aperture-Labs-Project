@@ -40,12 +40,6 @@ vi.mock("@/lib/inspection-store", async (importOriginal) => {
 });
 
 vi.mock("@/lib/defect-parser", () => ({
-    normalizeSeverityToDefect: (s: string | null) => {
-        if (s === "high") return "critical";
-        if (s === "med") return "major";
-        if (s === "low") return "minor";
-        return "minor";
-    },
     parseDefectsFromResponse: () => [],
 }));
 

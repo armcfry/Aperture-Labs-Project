@@ -17,13 +17,6 @@ from utils.pdf_extract import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
 
-_SEVERITY_MAP = {
-    "critical": "high",
-    "major": "med",
-    "minor": "low",
-}
-
-
 def _load_image_from_minio(bucket: str, object_name: str) -> Image.Image:
     data = minio_client.get_file(bucket=bucket, object_name=object_name)
     image = Image.open(io.BytesIO(data)).convert("RGB")
@@ -59,7 +52,7 @@ def _build_anomalies(db: Session, submission: Submission, result) -> int:
                 submission_id=submission.id,
                 label=defect.id or "foreign_object",
                 description=defect.description[:500] if defect.description else None,
-                severity=_SEVERITY_MAP.get(defect.severity, "med"),
+                severity="high",  # Any FOD is a failure — no severity tiers
                 confidence=0.90,
             ))
         return len(defects)

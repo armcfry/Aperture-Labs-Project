@@ -36,14 +36,17 @@ def _parse_pass_fail(response: str) -> str:
 
 
 def _severity_from_line(line: str) -> Optional[str]:
-    """Return severity keyword if line looks like a severity header."""
+    """Return 'fod' if line is a FOD section header (new or legacy format)."""
     lower = line.lower()
+    if "fod detected" in lower and ":" in lower:
+        return "fod"
+    # Legacy format support for responses generated before the format change
     if "critical" in lower and ("failure" in lower or ":" in lower):
-        return "critical"
+        return "fod"
     if "major" in lower and ("issue" in lower or ":" in lower):
-        return "major"
+        return "fod"
     if "minor" in lower and ("issue" in lower or ":" in lower):
-        return "minor"
+        return "fod"
     return None
 
 
@@ -76,7 +79,7 @@ def _parse_one_bullet(rest: str, current_severity: str, defect_index: int) -> Op
         return None
     return {
         "id": f"DEF-{str(defect_index + 1).zfill(3)}",
-        "severity": current_severity,
+        "severity": "fod",  # All FOD is a failure — no severity tiers
         "description": desc,
     }
 
@@ -86,10 +89,9 @@ def _fallback_defect(response: str) -> Optional[DefectSchema]:
     if not re.search(r"\b(fod|foreign object|debris|defect|anomal)\b", response, re.I):
         return None
     snippet = response[:200].replace("\n", " ").strip()
-    severity = "critical" if "critical" in response.lower() else "major"
     return DefectSchema(
         id="DEF-001",
-        severity=severity,
+        severity="fod",
         description=snippet or "Anomaly detected (see full analysis below)",
     )
 
@@ -147,18 +149,12 @@ Ollama was not reachable. For real detection use Qwen2.5-VL: run `ollama serve` 
 Specification: Design specs
 Images Analyzed: 1
 Defects Detected: 2 anomalies found
-Status: FAIL - Defects present
+Status: FAIL - FOD present
 
-CRITICAL FAILURES:
-• Surface Integrity: Foreign object detected (25%, 30%)
-  - Location: Upper-left quadrant
-  - Recommended Action: Reject and rework
+FOD DETECTED:
+• Foreign object at (25%, 30%) — unidentified metallic fragment poses an ingestion and impact risk to adjacent machinery
+• Debris at (50%, 50%) — loose particulate material that could migrate into sensitive components and cause mechanical damage
 
-MAJOR ISSUES:
-• Debris detected at center region (50%, 50%)
-  - Recommended Action: Quality review required
-
-RECOMMENDATION: Product does not meet manufacturing specifications. Immediate rework required.
 RESULT: FAIL"""
     defects = _parse_defects_from_response(mock_text)
     model = OllamaVLM(model_name="mock")
@@ -229,7 +225,7 @@ class OllamaVLM:
         response = requests.post(
             f"{self.ollama_host}/api/generate",
             json=payload,
-            timeout=10
+            timeout=120
         )
 
         inference_time = (time.time() - start_time) * 1000
@@ -276,18 +272,16 @@ class OllamaVLM:
     @staticmethod
     def _format_rules() -> str:
         return (
-            "STRICT OUTPUT FORMAT — you must follow this exactly when defects are found:\n\n"
-            "CRITICAL FAILURES:\n"
-            "• <object name> at (X%, Y%)\n\n"
-            "MAJOR ISSUES:\n"
-            "• <object name> at (X%, Y%)\n\n"
-            "MINOR ISSUES:\n"
-            "• <object name> at (X%, Y%)\n\n"
+            "STRICT OUTPUT FORMAT — when any FOD is found, use exactly this section:\n\n"
+            "FOD DETECTED:\n"
+            "• <object name> at (X%, Y%) — <why it is FOD>\n\n"
             "Rules:\n"
-            "- Use ONLY bullet points (•) under the exact headers above. Do NOT use numbered lists or prose.\n"
-            "- Each bullet must name the specific object (e.g. 'bolt', 'screw', 'cutter', 'metal fragment') "
-            "and its approximate position as (X%, Y%) where 0%,0% is top-left and 100%,100% is bottom-right.\n"
-            "- Only include severity sections that have findings. Omit empty sections.\n"
+            "- Use ONLY bullet points (•) under the 'FOD DETECTED:' header. Do NOT use numbered lists or prose.\n"
+            "- Each bullet must name the specific object (e.g. 'bolt', 'screw', 'cutter', 'metal fragment'), "
+            "its approximate position as (X%, Y%) where 0%,0% is top-left and 100%,100% is bottom-right, "
+            "and a brief explanation of why it is FOD "
+            "(e.g. 'loose metallic fastener poses ingestion risk', 'debris that could damage moving parts').\n"
+            "- Any FOD present is an automatic failure — do NOT rate severity.\n"
             "- End your response with exactly one line: RESULT: PASS or RESULT: FAIL\n"
         )
 

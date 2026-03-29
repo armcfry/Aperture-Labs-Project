@@ -47,22 +47,30 @@ class TestParsePassFail:
 
 
 class TestParseDefectsFromResponse:
-    def test_parses_critical_and_major_bullets(self):
+    def test_parses_fod_detected_bullets(self):
+        text = """FOD DETECTED:
+• First defect description
+• Second defect"""
+        defects = _parse_defects_from_response(text)
+        assert len(defects) >= 1
+        assert defects[0].severity == "fod"
+        assert "defect" in defects[0].description.lower() or "first" in defects[0].description.lower()
+
+    def test_parses_legacy_critical_and_major_bullets(self):
         text = """CRITICAL FAILURES:
 • First defect description
 MAJOR ISSUES:
 • Second defect"""
         defects = _parse_defects_from_response(text)
         assert len(defects) >= 1
-        assert defects[0].severity in ("critical", "major")
-        assert "defect" in defects[0].description.lower() or "first" in defects[0].description.lower()
+        assert defects[0].severity == "fod"
 
     def test_fallback_defect_when_fod_mentioned(self):
         text = "FOD detected in the image. No structured list."
         defects = _parse_defects_from_response(text)
         assert len(defects) == 1
         assert defects[0].id == "DEF-001"
-        assert defects[0].severity in ("critical", "major")
+        assert defects[0].severity == "fod"
 
     def test_empty_response_no_defects(self):
         text = "Nothing relevant here."

@@ -5,17 +5,8 @@
 
 export type Defect = {
     id: string;
-    severity: "critical" | "major" | "minor";
     description: string;
 };
-
-/** Normalize API (high/med/low) or VLM severity string to defect severity. */
-export function normalizeSeverityToDefect(s: string | null | undefined): Defect["severity"] {
-    if (s === "high" || s === "critical") return "critical";
-    if (s === "med" || s === "major") return "major";
-    if (s === "low" || s === "minor") return "minor";
-    return "major";
-}
 
 const METADATA_LABEL_RE =
     /^(object\s+classification|approximate\s+location|location|severity|confidence|recommended\s+action)\s*[:\s]/i;
@@ -38,37 +29,38 @@ function isMetadataLine(line: string): boolean {
 export function parseDefectsFromResponse(response: string): Defect[] {
     const defects: Defect[] = [];
     const lines = response.split(/\r?\n/);
-    let currentSeverity: Defect["severity"] | null = null;
+    let inFodSection = false;
     let defectIndex = 0;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const lower = line.toLowerCase();
 
-        // Detect severity sections
-        if (lower.includes("critical") && (lower.includes("failure") || lower.includes(":"))) {
-            currentSeverity = "critical";
-        } else if (lower.includes("major") && (lower.includes("issue") || lower.includes(":"))) {
-            currentSeverity = "major";
-        } else if (lower.includes("minor") && (lower.includes("issue") || lower.includes(":"))) {
-            currentSeverity = "minor";
+        // Detect FOD section headers (new format and legacy)
+        if (
+            (lower.includes("fod detected") && lower.includes(":")) ||
+            (lower.includes("critical") && (lower.includes("failure") || lower.includes(":"))) ||
+            (lower.includes("major") && (lower.includes("issue") || lower.includes(":"))) ||
+            (lower.includes("minor") && (lower.includes("issue") || lower.includes(":")))
+        ) {
+            inFodSection = true;
+            continue;
         }
 
-        // Skip metadata lines entirely (location, severity, confidence, recommended action, etc.)
+        // Skip metadata lines entirely
         if (defects.length > 0 && isMetadataLine(line)) {
             continue;
         }
 
         // Extract bullet points as defect descriptions
         const bulletMatch = line.match(/^[\s]*[•\-*]\s*(.+)/);
-        if (bulletMatch && currentSeverity) {
+        if (bulletMatch && inFodSection) {
             const content = bulletMatch[1].trim();
             if (isMetadataContent(content)) continue;
             const desc = cleanDescription(content);
             if (desc.length > 5) {
                 defects.push({
                     id: `DEF-${String(defectIndex + 1).padStart(3, "0")}`,
-                    severity: currentSeverity,
                     description: desc,
                 });
                 defectIndex++;
@@ -83,7 +75,6 @@ export function parseDefectsFromResponse(response: string): Defect[] {
             const snippet = response.slice(0, 200).replace(/\s+/g, " ").trim();
             defects.push({
                 id: "DEF-001",
-                severity: response.toLowerCase().includes("critical") ? "critical" : "major",
                 description: snippet || "Anomaly detected (see full analysis below)",
             });
         }

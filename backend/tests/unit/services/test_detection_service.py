@@ -351,45 +351,16 @@ class TestBuildAnomalies:
         assert count == 2
         assert db.add.call_count == 2
 
-    def test_severity_mapping_critical_to_high(self):
+    def test_all_fod_anomalies_stored_as_high(self):
+        """Any FOD detection is a failure — all anomalies are stored with 'high' severity."""
         db = MagicMock()
         submission = _make_submission()
-        result = _make_result(pass_fail="fail", defects=[self._make_defect(severity="critical")])
-
-        detection_service._build_anomalies(db, submission, result)
-
-        anomaly = db.add.call_args[0][0]
-        assert anomaly.severity == "high"
-
-    def test_severity_mapping_major_to_med(self):
-        db = MagicMock()
-        submission = _make_submission()
-        result = _make_result(pass_fail="fail", defects=[self._make_defect(severity="major")])
-
-        detection_service._build_anomalies(db, submission, result)
-
-        anomaly = db.add.call_args[0][0]
-        assert anomaly.severity == "med"
-
-    def test_severity_mapping_minor_to_low(self):
-        db = MagicMock()
-        submission = _make_submission()
-        result = _make_result(pass_fail="fail", defects=[self._make_defect(severity="minor")])
-
-        detection_service._build_anomalies(db, submission, result)
-
-        anomaly = db.add.call_args[0][0]
-        assert anomaly.severity == "low"
-
-    def test_unknown_severity_defaults_to_med(self):
-        db = MagicMock()
-        submission = _make_submission()
-        result = _make_result(pass_fail="fail", defects=[self._make_defect(severity="extreme")])
-
-        detection_service._build_anomalies(db, submission, result)
-
-        anomaly = db.add.call_args[0][0]
-        assert anomaly.severity == "med"
+        for sev in ("fod", "critical", "major", "minor", "extreme"):
+            db.reset_mock()
+            result = _make_result(pass_fail="fail", defects=[self._make_defect(severity=sev)])
+            detection_service._build_anomalies(db, submission, result)
+            anomaly = db.add.call_args[0][0]
+            assert anomaly.severity == "high", f"Expected 'high' for severity={sev!r}"
 
     def test_long_description_truncated_to_500(self):
         db = MagicMock()
