@@ -9,11 +9,17 @@ import base64
 import io
 import logging
 import re
+import threading
 from typing import Optional
 
 from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
+
+# Set by default so callers proceed immediately when no pre-load was scheduled.
+# preload_owlv2() clears it before loading and sets it again when done.
+_load_ready = threading.Event()
+_load_ready.set()
 
 _SEVERITY_COLORS: dict[str, tuple[int, int, int]] = {
     "fod": (220, 38, 38),   # red — all FOD is a failure
@@ -47,7 +53,7 @@ class OWLv2Detector:
 
         if torch.cuda.is_available():
             self._device = torch.device("cuda")
-        elif torch.backends.mps.is_available():
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             self._device = torch.device("mps")
         else:
             self._device = torch.device("cpu")
@@ -221,3 +227,28 @@ def get_owlv2_detector() -> OWLv2Detector:
     if _detector is None:
         _detector = OWLv2Detector()
     return _detector
+
+
+def preload_owlv2() -> None:
+    """Load OWLv2 at startup in a background thread.
+
+    Clears _load_ready so that detection workers block until the model is
+    ready (or until loading fails), then sets it so they can proceed.
+    """
+    _load_ready.clear()
+    try:
+        get_owlv2_detector()._load()
+        logger.info("OWLv2 pre-load complete.")
+    except Exception:
+        logger.exception("OWLv2 pre-load failed — bounding-box annotation will be skipped.")
+    finally:
+        _load_ready.set()
+
+
+def wait_for_owlv2(timeout: float = 300) -> None:
+    """Block until OWLv2 has finished loading (or timeout expires).
+
+    If preload_owlv2() was never called the event is already set, so this
+    returns immediately without waiting.
+    """
+    _load_ready.wait(timeout=timeout)

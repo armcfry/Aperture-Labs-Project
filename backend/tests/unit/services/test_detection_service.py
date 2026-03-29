@@ -187,6 +187,30 @@ class TestRunDetection:
 
         mock_db.close.assert_called_once()
 
+    def test_wait_for_owlv2_called_before_annotation(self):
+        """wait_for_owlv2() must be called when defects are present."""
+        defect = MagicMock()
+        defect.id = "DEF-001"
+        defect.description = "bolt on runway"
+        defect.severity = "fod"
+
+        result = _make_result(pass_fail="fail", defects=[defect])
+        mock_db = MagicMock()
+        mock_db.get.return_value = _make_submission()
+
+        with (
+            patch("services.detection_service.SessionLocal", return_value=mock_db),
+            patch("services.detection_service.minio_client"),
+            patch("services.detection_service._load_image_from_minio", return_value=MagicMock()),
+            patch("services.detection_service.get_model") as mock_get_model,
+            patch("services.detection_service.wait_for_owlv2") as mock_wait,
+            patch("services.detection_service.build_queries_and_severity_map", return_value=([], {})),
+        ):
+            mock_get_model.return_value.detect_fod.return_value = result
+            detection_service._run_detection(SUBMISSION_ID, PROJECT_ID, IMAGE_KEY)
+
+        mock_wait.assert_called_once()
+
     def test_owlv2_annotation_stored_when_defects_present(self):
         """Line 118: image_to_base64(annotated) runs when OWLv2 returns an annotated image."""
         defect = MagicMock()

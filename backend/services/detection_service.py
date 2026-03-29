@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from db.models import Submission, Anomaly
 from db.session import SessionLocal
 from models.ollama_vlm import get_model
-from models.owlv2 import get_owlv2_detector, build_queries_and_severity_map, image_to_base64
+from models.owlv2 import get_owlv2_detector, build_queries_and_severity_map, image_to_base64, wait_for_owlv2
 from services import minio_client
 from utils.pdf_extract import extract_text_from_pdf
 
@@ -112,6 +112,7 @@ def _run_detection(submission_id: uuid.UUID, project_id: uuid.UUID, image_object
         annotated_image: str | None = None
         if result.defects:
             try:
+                wait_for_owlv2()
                 queries, severity_map = build_queries_and_severity_map(result.defects)
                 if queries:
                     annotated = get_owlv2_detector().annotate(image, queries, severity_map)
