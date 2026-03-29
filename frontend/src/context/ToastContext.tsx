@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ToastContainer, type Toast, type ToastVariant } from "@/components/ui/toast";
 
 const AUTO_DISMISS_MS = 5000;
@@ -27,10 +27,8 @@ export function ToastProvider({ children }: Readonly<{ children: React.ReactNode
         timers.current.delete(id);
         // Mark as removing so the exit animation plays, then remove from DOM
         setToasts((prev) => prev.map((t) => t.id === id ? { ...t, removing: true } : t));
-        const exitTimer = setTimeout(
-            () => setToasts((prev) => prev.filter((t) => t.id !== id)),
-            220,
-        );
+        const removeById = (prev: Toast[]) => prev.filter((t) => t.id !== id);
+        const exitTimer = setTimeout(() => setToasts(removeById), 220);
         timers.current.set(`${id}-exit`, exitTimer);
     }, []);
 
@@ -52,8 +50,10 @@ export function ToastProvider({ children }: Readonly<{ children: React.ReactNode
         };
     }, []);
 
+    const contextValue = useMemo(() => ({ addToast }), [addToast]);
+
     return (
-        <ToastContext.Provider value={{ addToast }}>
+        <ToastContext.Provider value={contextValue}>
             {children}
             <ToastContainer toasts={toasts} onDismiss={dismiss} />
         </ToastContext.Provider>

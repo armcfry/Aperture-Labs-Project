@@ -68,9 +68,9 @@ export default function InspectHistorySidebar() {
                 addToast("Inspection timed out", { description: filename, variant: "warning" });
             } else if (currentStatus === "error") {
                 addToast("Inspection error", { description: filename, variant: "error" });
-            } else {
-                addToast("Inspection failed — FAIL", { description: filename, variant: "error" });
-            }
+            }// } else {
+            //     addToast("Inspection failed — FAIL", { description: filename, variant: "error" });
+            // }
         },
         [addToast],
     );
