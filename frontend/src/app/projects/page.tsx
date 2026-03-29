@@ -4,14 +4,13 @@
  * Page for creating new projects and viewing all projects.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
     FileText,
     Plus,
     X,
     FolderOpen,
-    Archive,
     Trash2,
     ChevronDown,
     ChevronRight,
@@ -24,7 +23,6 @@ import {
     createProject,
     uploadDesignSpec,
     listDesignSpecs,
-    archiveProject,
     deleteProject,
     API_BASE_URL,
     type ApiProject,
@@ -40,18 +38,12 @@ function apiProjectToAppProject(
     createdAt: string;
     updatedAt: string;
     designSpecs: string[];
-    archivedAt: string | null;
 } {
     const created =
         typeof p.created_at === "string" ? p.created_at : new Date(p.created_at).toISOString();
     const updated =
         typeof p.updated_at === "string" ? p.updated_at : new Date(p.updated_at).toISOString();
-    const archivedAt =
-        p.archived_at == null
-            ? null
-            : typeof p.archived_at === "string"
-              ? p.archived_at
-              : new Date(p.archived_at).toISOString();
+
     return {
         id: p.id,
         name: p.name,
@@ -59,8 +51,20 @@ function apiProjectToAppProject(
         createdAt: created,
         updatedAt: updated,
         designSpecs,
-        archivedAt,
     };
+}
+
+async function uploadSpecFiles(projectId: string, files: File[]): Promise<string[]> {
+    const uploadedFilenames: string[] = [];
+    for (const file of files) {
+        try {
+            await uploadDesignSpec(projectId, file);
+            uploadedFilenames.push(file.name);
+        } catch (e) {
+            console.warn("Design spec upload failed:", file.name, e);
+        }
+    }
+    return uploadedFilenames;
 }
 
 export default function ProjectsPage() {
@@ -78,13 +82,11 @@ export default function ProjectsPage() {
                 createdAt: string;
                 updatedAt: string;
                 designSpecs: string[];
-                archivedAt: string | null;
             }
         >
     >([]);
     const [isLoadingProjects, setIsLoadingProjects] = useState(true);
     const [projectsError, setProjectsError] = useState<string | null>(null);
-    const [projectFilter, setProjectFilter] = useState<"active" | "archived" | "all">("active");
 
     const [projectName, setProjectName] = useState<string>("");
     const [designSpecs, setDesignSpecs] = useState<File[]>([]);
@@ -93,7 +95,6 @@ export default function ProjectsPage() {
     const [createError, setCreateError] = useState<string | null>(null);
 
     const [confirmAction, setConfirmAction] = useState<{
-        type: "archive" | "delete";
         projectId: string;
         projectName: string;
     } | null>(null);
@@ -105,7 +106,7 @@ export default function ProjectsPage() {
         setIsLoadingProjects(true);
         setProjectsError(null);
         try {
-            const projects = await listProjects(true);
+            const projects = await listProjects();
             const withDesigns = await Promise.all(
                 projects.map(async (p) => {
                     try {
@@ -137,22 +138,11 @@ export default function ProjectsPage() {
 
     const hasProjects = existingProjects.length > 0;
 
-    const filteredProjects = useMemo(() => {
-        if (projectFilter === "active") return existingProjects.filter((p) => p.archivedAt == null);
-        if (projectFilter === "archived")
-            return existingProjects.filter((p) => p.archivedAt != null);
-        return existingProjects;
-    }, [existingProjects, projectFilter]);
-
     const handleConfirmAction = async () => {
         if (!confirmAction) return;
         setIsActionLoading(true);
         try {
-            if (confirmAction.type === "archive") {
-                await archiveProject(confirmAction.projectId);
-            } else {
-                await deleteProject(confirmAction.projectId);
-            }
+            await deleteProject(confirmAction.projectId);
             setConfirmAction(null);
             await fetchProjects();
         } catch (err) {
@@ -185,15 +175,7 @@ export default function ProjectsPage() {
         setCreateError(null);
         try {
             const created = await createProject({ name: projectName.trim() });
-            const uploadedFilenames: string[] = [];
-            for (const file of designSpecs) {
-                try {
-                    await uploadDesignSpec(created.id, file);
-                    uploadedFilenames.push(file.name);
-                } catch (e) {
-                    console.warn("Design spec upload failed:", file.name, e);
-                }
-            }
+            const uploadedFilenames = await uploadSpecFiles(created.id, designSpecs);
             if (uploadedFilenames.length < designSpecs.length) {
                 alert(
                     "Project created, but some design specs failed to upload. Ensure MinIO is running (docker compose up -d).",
@@ -214,7 +196,6 @@ export default function ProjectsPage() {
             createdAt: string;
             updatedAt: string;
             designSpecs: string[];
-            archivedAt: string | null;
         },
     ) => {
         setCurrentProject(project as unknown as Project);
@@ -224,22 +205,26 @@ export default function ProjectsPage() {
     const showList = !showNewProject && hasProjects;
     const showCreateForm = showNewProject || (!hasProjects && !isLoadingProjects);
 
-    return (
-        <div className="flex-1 flex flex-col bg-slate-50 dark:bg-zinc-950 transition-colors overflow-hidden">
-            {isLoadingProjects ? (
-                <div className="flex-1 flex items-center justify-center">
-                    <p className="text-slate-600 dark:text-zinc-400">Loading projects...</p>
-                </div>
-            ) : projectsError ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-8">
-                    <Alert variant="error" className="max-w-md">
-                        {projectsError}
-                    </Alert>
-                    <p className="mt-4 text-sm text-slate-500 dark:text-zinc-500">
-                        Ensure the backend is running at {API_BASE_URL}.
-                    </p>
-                </div>
-            ) : showList ? (
+    let projectsContent: React.ReactNode = null;
+    if (isLoadingProjects) {
+        projectsContent = (
+            <div className="flex-1 flex items-center justify-center">
+                <p className="text-slate-600 dark:text-zinc-400">Loading projects...</p>
+            </div>
+        );
+    } else if (projectsError) {
+        projectsContent = (
+            <div className="flex-1 flex flex-col items-center justify-center p-8">
+                <Alert variant="error" className="max-w-md">
+                    {projectsError}
+                </Alert>
+                <p className="mt-4 text-sm text-slate-500 dark:text-zinc-500">
+                    Ensure the backend is running at {API_BASE_URL}.
+                </p>
+            </div>
+        );
+    } else if (showList) {
+        projectsContent = (
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <div className="max-w-[1200px] w-full mx-auto px-6 pt-6 pb-2 flex-shrink-0">
                         <div className="text-center mb-8">
@@ -265,24 +250,6 @@ export default function ProjectsPage() {
                                     <Plus /> Create New Project
                                 </Button>
                             </div>
-                            {/* Project filter: active (default) | archived | all */}
-                            <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-zinc-800 w-fit mb-6">
-                                {(["active", "archived", "all"] as const).map((filter) => (
-                                    <button
-                                        key={filter}
-                                        type="button"
-                                        onClick={() => setProjectFilter(filter)}
-                                        className={cn(
-                                            "px-3 py-1.5 rounded-md text-sm font-medium transition-colors capitalize",
-                                            projectFilter === filter
-                                                ? "bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-sm"
-                                                : "text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white",
-                                        )}
-                                    >
-                                        {filter}
-                                    </button>
-                                ))}
-                            </div>
                         </div>
                     </div>
 
@@ -291,7 +258,7 @@ export default function ProjectsPage() {
                         <div className="max-w-[1200px] w-full mx-auto px-6 pb-8">
                             <div className="max-w-[800px] mx-auto">
                                 <div className="space-y-3">
-                                    {filteredProjects.map((project) => {
+                                    {existingProjects.map((project) => {
                                         const specCount = project.designSpecs?.length || 0;
                                         const isExpanded = expandedSpecs.has(project.id);
                                         return (
@@ -309,11 +276,6 @@ export default function ProjectsPage() {
                                                             <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                                                                 {project.name}
                                                             </h3>
-                                                            {project.archivedAt != null && (
-                                                                <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">
-                                                                    Archived
-                                                                </span>
-                                                            )}
                                                         </div>
                                                         <p className="text-xs text-slate-400 dark:text-zinc-600">
                                                             Created{" "}
@@ -325,21 +287,6 @@ export default function ProjectsPage() {
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setConfirmAction({
-                                                                    type: "archive",
-                                                                    projectId: project.id,
-                                                                    projectName: project.name,
-                                                                });
-                                                            }}
-                                                            className="p-2 rounded-lg text-slate-400 dark:text-zinc-600 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
-                                                            title="Archive project"
-                                                        >
-                                                            <Archive className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setConfirmAction({
-                                                                    type: "delete",
                                                                     projectId: project.id,
                                                                     projectName: project.name,
                                                                 });
@@ -413,46 +360,31 @@ export default function ProjectsPage() {
                         </div>
                     </div>
                 </div>
-            ) : null}
+        );
+    }
+
+    return (
+        <div className="flex-1 flex flex-col bg-slate-50 dark:bg-zinc-950 transition-colors overflow-hidden">
+            {projectsContent}
 
             {/* Confirmation Dialog */}
             {confirmAction && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
                     <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
                         <div className="flex items-center gap-3 mb-4">
-                            {confirmAction.type === "archive" ? (
-                                <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
-                                    <Archive className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                                </div>
-                            ) : (
-                                <div className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
-                                    <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
-                                </div>
-                            )}
+                            <div className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
+                                <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+                            </div>
                             <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                                {confirmAction.type === "archive"
-                                    ? "Archive Project"
-                                    : "Delete Project"}
+                                Delete Project
                             </h3>
                         </div>
                         <p className="text-sm text-slate-600 dark:text-zinc-400 mb-6">
-                            {confirmAction.type === "archive" ? (
-                                <>
-                                    Are you sure you want to archive{" "}
-                                    <span className="font-medium text-slate-900 dark:text-white">
-                                        {confirmAction.projectName}
-                                    </span>
-                                    ? Archived projects will be hidden from the list.
-                                </>
-                            ) : (
-                                <>
-                                    Are you sure you want to delete{" "}
-                                    <span className="font-medium text-slate-900 dark:text-white">
-                                        {confirmAction.projectName}
-                                    </span>
-                                    ? The project and its data will be removed from your list.
-                                </>
-                            )}
+                            Are you sure you want to delete{" "}
+                            <span className="font-medium text-slate-900 dark:text-white">
+                                {confirmAction.projectName}
+                            </span>
+                            {"? "}The project and its data will be removed from your list.
                         </p>
                         <div className="flex gap-3 justify-end">
                             <button
@@ -465,18 +397,9 @@ export default function ProjectsPage() {
                             <button
                                 onClick={handleConfirmAction}
                                 disabled={isActionLoading}
-                                className={cn(
-                                    "px-4 py-2 text-sm font-medium rounded-lg text-white transition-colors disabled:opacity-50",
-                                    confirmAction.type === "archive"
-                                        ? "bg-amber-600 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-700"
-                                        : "bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700",
-                                )}
+                                className="px-4 py-2 text-sm font-medium rounded-lg text-white transition-colors disabled:opacity-50 bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700"
                             >
-                                {isActionLoading
-                                    ? "Processing..."
-                                    : confirmAction.type === "archive"
-                                      ? "Archive"
-                                      : "Delete"}
+                                {isActionLoading ? "Processing..." : "Delete"}
                             </button>
                         </div>
                     </div>
@@ -507,10 +430,11 @@ export default function ProjectsPage() {
                             <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-8">
                                 {/* Project Name */}
                                 <div className="mb-8">
-                                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-3">
+                                    <label htmlFor="project-name" className="block text-sm font-semibold text-slate-900 dark:text-white mb-3">
                                         Project Name
                                     </label>
                                     <input
+                                        id="project-name"
                                         type="text"
                                         value={projectName}
                                         onChange={(e) => setProjectName(e.target.value)}
@@ -521,7 +445,7 @@ export default function ProjectsPage() {
 
                                 {/* Design Specifications */}
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-900 dark:text-white mb-3">
+                                    <label htmlFor="design-spec" className="block text-sm font-semibold text-slate-900 dark:text-white mb-3">
                                         Design Specification(s)
                                     </label>
 

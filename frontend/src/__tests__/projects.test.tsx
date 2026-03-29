@@ -16,10 +16,12 @@ vi.mock("next/navigation", () => ({
 }));
 
 const mockSetCurrentProject = vi.fn();
+let mockUser: { id: string; email: string } | null = { id: "user-1", email: "test@example.com" };
+let mockHasRestoredFromStorage = true;
 vi.mock("@/app/AppProvider", () => ({
     useApp: () => ({
-        user: { id: "user-1", email: "test@example.com" },
-        hasRestoredFromStorage: true,
+        user: mockUser,
+        hasRestoredFromStorage: mockHasRestoredFromStorage,
         setCurrentProject: mockSetCurrentProject,
     }),
 }));
@@ -59,7 +61,6 @@ type ApiProject = {
     name: string;
     created_at: string;
     updated_at: string;
-    archived_at?: string | null;
 };
 
 function makeApiProject(overrides: Partial<ApiProject> = {}): ApiProject {
@@ -68,7 +69,6 @@ function makeApiProject(overrides: Partial<ApiProject> = {}): ApiProject {
         name: "My Project",
         created_at: "2026-01-01T00:00:00Z",
         updated_at: "2026-01-01T00:00:00Z",
-        archived_at: null,
         ...overrides,
     };
 }
@@ -79,6 +79,8 @@ function makeSpecFile(name = "spec.pdf"): File {
 
 describe("ProjectsPage — Req 13: create projects", () => {
     beforeEach(() => {
+        mockUser = { id: "user-1", email: "test@example.com" };
+        mockHasRestoredFromStorage = true;
         mockListProjects.mockReset();
         mockListDesignSpecs.mockReset();
         mockCreateProject.mockReset();
@@ -115,7 +117,7 @@ describe("ProjectsPage — Req 13: create projects", () => {
         await waitFor(() => expect(screen.getByPlaceholderText(/circuit board/i)).toBeInTheDocument());
         await userEvent.type(screen.getByPlaceholderText(/circuit board/i), "My Project");
 
-        const specInput = screen.getByLabelText(/drop files here/i) as HTMLInputElement;
+        const specInput = screen.getByLabelText(/drop files here/i);
         await userEvent.upload(specInput, makeSpecFile("spec.pdf"));
 
         expect(screen.getByRole("button", { name: /create project/i })).not.toBeDisabled();
@@ -129,7 +131,7 @@ describe("ProjectsPage — Req 13: create projects", () => {
         await waitFor(() => expect(screen.getByPlaceholderText(/circuit board/i)).toBeInTheDocument());
 
         await userEvent.type(screen.getByPlaceholderText(/circuit board/i), "My Project");
-        const specInput = screen.getByLabelText(/drop files here/i) as HTMLInputElement;
+        const specInput = screen.getByLabelText(/drop files here/i);
         await userEvent.upload(specInput, [makeSpecFile("a.pdf"), makeSpecFile("b.pdf")]);
         await userEvent.click(screen.getByRole("button", { name: /create project/i }));
 
@@ -145,7 +147,7 @@ describe("ProjectsPage — Req 13: create projects", () => {
         await waitFor(() => expect(screen.getByPlaceholderText(/circuit board/i)).toBeInTheDocument());
 
         await userEvent.type(screen.getByPlaceholderText(/circuit board/i), "My Project");
-        const specInput = screen.getByLabelText(/drop files here/i) as HTMLInputElement;
+        const specInput = screen.getByLabelText(/drop files here/i);
         await userEvent.upload(specInput, makeSpecFile("spec.pdf"));
         await userEvent.click(screen.getByRole("button", { name: /create project/i }));
 
@@ -164,7 +166,7 @@ describe("ProjectsPage — Req 3: multiple design specs upload", () => {
     it("design spec file input has multiple attribute", async () => {
         render(<ProjectsPage />);
         await waitFor(() => expect(screen.getByLabelText(/drop files here/i)).toBeInTheDocument());
-        const specInput = screen.getByLabelText(/drop files here/i) as HTMLInputElement;
+        const specInput = screen.getByLabelText(/drop files here/i);
         expect(specInput).toHaveAttribute("multiple");
     });
 
@@ -172,7 +174,7 @@ describe("ProjectsPage — Req 3: multiple design specs upload", () => {
         render(<ProjectsPage />);
         await waitFor(() => expect(screen.getByLabelText(/drop files here/i)).toBeInTheDocument());
 
-        const specInput = screen.getByLabelText(/drop files here/i) as HTMLInputElement;
+        const specInput = screen.getByLabelText(/drop files here/i);
         await userEvent.upload(specInput, [makeSpecFile("spec-a.pdf"), makeSpecFile("spec-b.pdf")]);
 
         expect(screen.getByText("spec-a.pdf")).toBeInTheDocument();
@@ -187,7 +189,7 @@ describe("ProjectsPage — Req 3: multiple design specs upload", () => {
         await waitFor(() => expect(screen.getByPlaceholderText(/circuit board/i)).toBeInTheDocument());
         await userEvent.type(screen.getByPlaceholderText(/circuit board/i), "P");
 
-        const specInput = screen.getByLabelText(/drop files here/i) as HTMLInputElement;
+        const specInput = screen.getByLabelText(/drop files here/i);
         await userEvent.upload(specInput, [makeSpecFile("a.pdf"), makeSpecFile("b.pdf"), makeSpecFile("c.pdf")]);
         await userEvent.click(screen.getByRole("button", { name: /create project/i }));
 
@@ -197,6 +199,8 @@ describe("ProjectsPage — Req 3: multiple design specs upload", () => {
 
 describe("ProjectsPage — Req 12: group artifacts by project", () => {
     beforeEach(() => {
+        mockUser = { id: "user-1", email: "test@example.com" };
+        mockHasRestoredFromStorage = true;
         mockListDesignSpecs.mockReset();
         mockListProjects.mockReset();
         mockPush.mockReset();
@@ -217,60 +221,199 @@ describe("ProjectsPage — Req 12: group artifacts by project", () => {
         await waitFor(() => expect(screen.getByText("Alpha Project")).toBeInTheDocument());
         expect(screen.getByText("Beta Project")).toBeInTheDocument();
     });
+});
 
-    it("archived projects show an 'Archived' badge", async () => {
-        mockListProjects.mockResolvedValue([
-            makeApiProject({ id: "p1", name: "Old Project", archived_at: "2026-01-15T00:00:00Z" }),
-        ]);
+describe("ProjectsPage — auth redirect", () => {
+    beforeEach(() => {
+        mockHasRestoredFromStorage = true;
+        mockListProjects.mockResolvedValue([]);
         mockListDesignSpecs.mockResolvedValue([]);
-
-        render(<ProjectsPage />);
-        // Switch to "All" tab so archived projects are visible
-        await waitFor(() => expect(screen.getByRole("button", { name: /^all$/i })).toBeInTheDocument());
-        await userEvent.click(screen.getByRole("button", { name: /^all$/i }));
-        await waitFor(() => expect(screen.getByText("Old Project")).toBeInTheDocument());
-        expect(screen.getByText("Archived")).toBeInTheDocument();
+        mockPush.mockReset();
+        mockReplace.mockReset();
     });
 
-    it("filter tabs exist for active, archived, and all", async () => {
-        mockListProjects.mockResolvedValue([makeApiProject()]);
-        mockListDesignSpecs.mockResolvedValue([]);
-
+    it("redirects to /login when user is null after storage is restored", async () => {
+        mockUser = null;
         render(<ProjectsPage />);
-        await waitFor(() => expect(screen.getByRole("button", { name: /^active$/i })).toBeInTheDocument());
-        expect(screen.getByRole("button", { name: /^archived$/i })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: /^all$/i })).toBeInTheDocument();
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"));
     });
 
-    it("clicking 'archived' filter hides active projects and shows archived ones", async () => {
-        mockListProjects.mockResolvedValue([
-            makeApiProject({ id: "p1", name: "Active Project", archived_at: null }),
-            makeApiProject({ id: "p2", name: "Archived Project", archived_at: "2026-01-15T00:00:00Z" }),
-        ]);
-        mockListDesignSpecs.mockResolvedValue([]);
-
+    it("does not redirect when user is present", async () => {
+        mockUser = { id: "user-1", email: "test@example.com" };
         render(<ProjectsPage />);
-        await waitFor(() => expect(screen.getByText("Active Project")).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(/create a new project/i)).toBeInTheDocument());
+        expect(mockReplace).not.toHaveBeenCalled();
+    });
+});
 
-        await userEvent.click(screen.getByRole("button", { name: /^archived$/i }));
-
-        expect(screen.queryByText("Active Project")).not.toBeInTheDocument();
-        expect(screen.getByText("Archived Project")).toBeInTheDocument();
+describe("ProjectsPage — loading and error states", () => {
+    beforeEach(() => {
+        mockUser = { id: "user-1", email: "test@example.com" };
+        mockHasRestoredFromStorage = true;
+        mockListProjects.mockReset();
+        mockListDesignSpecs.mockReset();
     });
 
-    it("clicking 'all' filter shows both active and archived projects", async () => {
+    it("shows loading indicator while projects are being fetched", () => {
+        mockListProjects.mockReturnValue(new Promise(() => {})); // never resolves
+        mockListDesignSpecs.mockResolvedValue([]);
+        render(<ProjectsPage />);
+        expect(screen.getByText(/loading projects/i)).toBeInTheDocument();
+    });
+
+    it("shows error alert when listProjects rejects", async () => {
+        mockListProjects.mockRejectedValue(new Error("Network error"));
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByText(/network error/i)).toBeInTheDocument());
+    });
+});
+
+describe("ProjectsPage — project list interactions", () => {
+    beforeEach(() => {
+        mockUser = { id: "user-1", email: "test@example.com" };
+        mockHasRestoredFromStorage = true;
+        mockListProjects.mockReset();
+        mockListDesignSpecs.mockReset();
         mockListProjects.mockResolvedValue([
-            makeApiProject({ id: "p1", name: "Active Project", archived_at: null }),
-            makeApiProject({ id: "p2", name: "Archived Project", archived_at: "2026-01-15T00:00:00Z" }),
+            makeApiProject({ id: "p1", name: "Alpha Project" }),
         ]);
         mockListDesignSpecs.mockResolvedValue([]);
+        mockDeleteProject.mockReset();
+        mockPush.mockReset();
+        mockSetCurrentProject.mockReset();
+    });
+
+    it("selecting a project calls setCurrentProject and navigates to /inspect", async () => {
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByText("Alpha Project")).toBeInTheDocument());
+        await userEvent.click(screen.getByText("Alpha Project"));
+        expect(mockSetCurrentProject).toHaveBeenCalled();
+        expect(mockPush).toHaveBeenCalledWith("/inspect");
+    });
+
+    it("clicking trash icon shows the delete confirmation dialog", async () => {
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByTitle("Delete project")).toBeInTheDocument());
+        await userEvent.click(screen.getByTitle("Delete project"));
+        expect(screen.getByText(/delete project/i)).toBeInTheDocument();
+        expect(screen.getByText(/are you sure/i)).toBeInTheDocument();
+    });
+
+    it("clicking Cancel in the confirmation dialog dismisses it", async () => {
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByTitle("Delete project")).toBeInTheDocument());
+        await userEvent.click(screen.getByTitle("Delete project"));
+        await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+        expect(screen.queryByText(/are you sure/i)).not.toBeInTheDocument();
+    });
+
+    it("confirming delete calls deleteProject and refreshes the list", async () => {
+        mockDeleteProject.mockResolvedValue(undefined);
+        mockListProjects
+            .mockResolvedValueOnce([makeApiProject({ id: "p1", name: "Alpha Project" })])
+            .mockResolvedValueOnce([]);
 
         render(<ProjectsPage />);
-        await waitFor(() => expect(screen.getByText("Active Project")).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByTitle("Delete project")).toBeInTheDocument());
+        await userEvent.click(screen.getByTitle("Delete project"));
+        await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
-        await userEvent.click(screen.getByRole("button", { name: /^all$/i }));
+        await waitFor(() => expect(mockDeleteProject).toHaveBeenCalledWith("p1"));
+        await waitFor(() => expect(mockListProjects).toHaveBeenCalledTimes(2));
+    });
 
-        expect(screen.getByText("Active Project")).toBeInTheDocument();
-        expect(screen.getByText("Archived Project")).toBeInTheDocument();
+    it("clicking Create New Project button switches to the create form", async () => {
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByRole("button", { name: /create new project/i })).toBeInTheDocument());
+        await userEvent.click(screen.getByRole("button", { name: /create new project/i }));
+        expect(screen.getByPlaceholderText(/circuit board/i)).toBeInTheDocument();
+    });
+
+    it("Back to projects button returns to the project list", async () => {
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByRole("button", { name: /create new project/i })).toBeInTheDocument());
+        await userEvent.click(screen.getByRole("button", { name: /create new project/i }));
+        await userEvent.click(screen.getByText(/back to projects/i));
+        await waitFor(() => expect(screen.getByText("Alpha Project")).toBeInTheDocument());
+    });
+});
+
+describe("ProjectsPage — design spec expand/collapse and preview", () => {
+    beforeEach(() => {
+        mockUser = { id: "user-1", email: "test@example.com" };
+        mockHasRestoredFromStorage = true;
+        mockListProjects.mockResolvedValue([
+            makeApiProject({ id: "p1", name: "Alpha Project" }),
+        ]);
+        mockListDesignSpecs.mockResolvedValue(["spec-a.pdf", "spec-b.pdf"]);
+    });
+
+    it("design spec count toggle expands to show spec filenames", async () => {
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByText(/2 design specifications/i)).toBeInTheDocument());
+        await userEvent.click(screen.getByText(/2 design specifications/i));
+        expect(screen.getByText("spec-a.pdf")).toBeInTheDocument();
+        expect(screen.getByText("spec-b.pdf")).toBeInTheDocument();
+    });
+
+    it("clicking the toggle a second time collapses the spec list", async () => {
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByText(/2 design specifications/i)).toBeInTheDocument());
+        await userEvent.click(screen.getByText(/2 design specifications/i));
+        await userEvent.click(screen.getByText(/2 design specifications/i));
+        expect(screen.queryByText("spec-a.pdf")).not.toBeInTheDocument();
+    });
+});
+
+describe("ProjectsPage — create form file management", () => {
+    beforeEach(() => {
+        mockUser = { id: "user-1", email: "test@example.com" };
+        mockHasRestoredFromStorage = true;
+        mockListProjects.mockResolvedValue([]);
+        mockListDesignSpecs.mockResolvedValue([]);
+        mockCreateProject.mockReset();
+        mockUploadDesignSpec.mockReset();
+    });
+
+    it("removing a spec file with the X button removes it from the list", async () => {
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByLabelText(/drop files here/i)).toBeInTheDocument());
+        await userEvent.upload(screen.getByLabelText(/drop files here/i), makeSpecFile("remove-me.pdf"));
+        expect(screen.getByText("remove-me.pdf")).toBeInTheDocument();
+        await userEvent.click(screen.getByTitle("Remove file"));
+        expect(screen.queryByText("remove-me.pdf")).not.toBeInTheDocument();
+    });
+
+    it("uploading a duplicate filename does not add a second entry", async () => {
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByLabelText(/drop files here/i)).toBeInTheDocument());
+        await userEvent.upload(screen.getByLabelText(/drop files here/i), makeSpecFile("dup.pdf"));
+        await userEvent.upload(screen.getByLabelText(/drop files here/i), makeSpecFile("dup.pdf"));
+        expect(screen.getAllByText("dup.pdf")).toHaveLength(1);
+    });
+
+    it("shows an error alert when createProject fails", async () => {
+        mockCreateProject.mockRejectedValue(new Error("Server error"));
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByPlaceholderText(/circuit board/i)).toBeInTheDocument());
+        await userEvent.type(screen.getByPlaceholderText(/circuit board/i), "My Project");
+        await userEvent.upload(screen.getByLabelText(/drop files here/i), makeSpecFile("spec.pdf"));
+        await userEvent.click(screen.getByRole("button", { name: /create project/i }));
+        await waitFor(() => expect(screen.getByText(/server error/i)).toBeInTheDocument());
+    });
+
+    it("calls setCurrentProject with the newly created project", async () => {
+        mockCreateProject.mockResolvedValue(makeApiProject({ id: "new-proj" }));
+        mockUploadDesignSpec.mockResolvedValue({ filename: "spec.pdf", project_id: "new-proj", object_key: "k" });
+
+        render(<ProjectsPage />);
+        await waitFor(() => expect(screen.getByPlaceholderText(/circuit board/i)).toBeInTheDocument());
+        await userEvent.type(screen.getByPlaceholderText(/circuit board/i), "My Project");
+        await userEvent.upload(screen.getByLabelText(/drop files here/i), makeSpecFile("spec.pdf"));
+        await userEvent.click(screen.getByRole("button", { name: /create project/i }));
+
+        await waitFor(() => expect(mockSetCurrentProject).toHaveBeenCalledWith(
+            expect.objectContaining({ id: "new-proj", name: "My Project" }),
+        ));
     });
 });

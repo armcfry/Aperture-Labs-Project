@@ -1,4 +1,4 @@
-.PHONY: dev dev-down dev-reset run kill kill-reset test test-unit test-api test-down clean
+.PHONY: dev dev-down dev-reset run kill kill-reset test test-unit test-api test-down test-frontend clean
 
 # -------------------------
 # OS Detection
@@ -71,8 +71,11 @@ endif
 test:
 	cd backend && pytest
 
-test-unit:
+test-backend:
 	cd backend && pytest -m unit
+
+test-frontend:
+	cd frontend && npm test
 
 # test-api: test-up
 # 	cd backend && pytest -m api

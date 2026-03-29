@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import List
+from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
@@ -11,6 +11,8 @@ from schemas.projects import (
     ProjectRead,
 )
 from services import project_service
+
+DbSession = Annotated[Session, Depends(get_db)]
 
 
 router = APIRouter(
@@ -29,7 +31,7 @@ router = APIRouter(
 )
 def create_project(
     payload: ProjectCreate,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return project_service.create_project(
         db=db,
@@ -42,12 +44,10 @@ def create_project(
 # -------------------------
 @router.get("", response_model=List[ProjectRead])
 def list_projects(
-    include_archived: bool = False,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return project_service.list_projects_for_user(
-        db=db,
-        include_archived=include_archived,
+        db=db
     )
 
 
@@ -57,7 +57,7 @@ def list_projects(
 @router.get("/{project_id}", response_model=ProjectRead)
 def get_project(
     project_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return project_service.get_project(
         db=db,
@@ -72,7 +72,7 @@ def get_project(
 def update_project(
     project_id: UUID,
     payload: ProjectUpdate,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     return project_service.update_project(
         db=db,
@@ -87,49 +87,9 @@ def update_project(
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(
     project_id: UUID,
-    db: Session = Depends(get_db),
+    db: DbSession,
 ):
     project_service.delete_project(
         db=db,
         project_id=project_id,
     )
-
-
-# -------------------------
-# Archive Project
-# -------------------------
-@router.post("/{project_id}/archive", response_model=ProjectRead)
-def archive_project(
-    project_id: UUID,
-    db: Session = Depends(get_db),
-):
-    return project_service.archive_project(
-        db=db,
-        project_id=project_id,
-    )
-
-
-# # -------------------------
-# # Unarchive Project
-# # -------------------------
-# @router.post("/{project_id}/unarchive", response_model=ProjectRead)
-# def unarchive_project(
-#     project_id: UUID,
-#     db: Session = Depends(get_db),
-    
-# ):
-#     try:
-#         return project_service.unarchive_project(
-#             db=db,
-#             project_id=project_id,
-#         )
-#     except exceptions.ProjectNotFound:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail="Project not found",
-#         )
-#     except exceptions.PermissionDenied:
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="Only the owner can unarchive this project",
-#         )

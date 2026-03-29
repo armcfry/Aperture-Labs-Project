@@ -39,12 +39,9 @@ def get_project(db: Session, project_id: uuid.UUID, include_deleted: bool = Fals
 
 
 def list_projects_for_user(
-    db: Session,
-    include_archived: bool = False,
+    db: Session
 ) -> list[Project]:
     query = db.query(Project).filter(Project.deleted_at.is_(None))
-    if not include_archived:
-        query = query.filter(Project.archived_at.is_(None))
     return query.order_by(Project.created_at.desc()).all()
 
 
@@ -61,8 +58,6 @@ def update_project(
         project.description = payload.description
     if payload.detector_version is not None:
         project.detector_version = payload.detector_version
-    if payload.archived_at is not None:
-        project.archived_at = payload.archived_at
 
     project.updated_at = datetime.utcnow()
     db.commit()
@@ -84,29 +79,3 @@ def delete_project(db: Session, project_id: uuid.UUID) -> None:
         minio_client.delete_project_bucket(str(project_id))
     except Exception:
         pass
-
-
-def archive_project(db: Session, project_id: uuid.UUID) -> Project:
-    project = get_project(db, project_id)
-
-    if project.archived_at is not None:
-        raise exceptions.InvalidStateTransition("Project is already archived")
-
-    project.archived_at = datetime.now(timezone.utc)
-    project.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(project)
-    return project
-
-
-def unarchive_project(db: Session, project_id: uuid.UUID) -> Project:
-    project = get_project(db, project_id)
-
-    if project.archived_at is None:
-        raise exceptions.InvalidStateTransition("Project is not archived")
-
-    project.archived_at = None
-    project.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(project)
-    return project

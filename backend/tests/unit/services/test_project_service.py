@@ -49,33 +49,9 @@ class TestProjectService:
         with pytest.raises(exceptions.ProjectNotFound):
             project_service.get_project(mock_db, uuid.uuid4())
 
-    def test_list_projects_excludes_archived(self):
-        """Test listing projects excludes archived by default."""
-        mock_projects = [MagicMock()]
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value.filter.return_value.order_by.return_value.all.return_value = mock_projects
-
-        result = project_service.list_projects_for_user(mock_db, include_archived=False)
-
-        assert len(result) == 1
-
-    def test_list_projects_includes_archived(self):
-        """Test listing projects includes archived when requested."""
-        mock_projects = [MagicMock(), MagicMock()]
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value.order_by.return_value.all.return_value = mock_projects
-
-        result = project_service.list_projects_for_user(mock_db, include_archived=True)
-        assert len(result) == 2
-
     def test_update_project(self):
         """Test updating a project."""
         mock_project = MagicMock()
-        mock_project.archived_at = None
         mock_db = MagicMock()
         chain = mock_db.query.return_value.filter.return_value
         chain.filter.return_value.first.return_value = mock_project
@@ -101,51 +77,3 @@ class TestProjectService:
         assert mock_project.deleted_at is not None
         assert mock_project.updated_at is not None
         mock_db.commit.assert_called_once()
-
-    def test_archive_project(self):
-        """Test archiving a project."""
-        mock_project = MagicMock()
-        mock_project.archived_at = None
-        mock_db = MagicMock()
-        chain = mock_db.query.return_value.filter.return_value
-        chain.filter.return_value.first.return_value = mock_project
-
-        project_service.archive_project(mock_db, uuid.uuid4())
-
-        assert mock_project.archived_at is not None
-        mock_db.commit.assert_called_once()
-
-    def test_archive_project_already_archived(self):
-        """Test archiving already archived project raises InvalidStateTransition."""
-        mock_project = MagicMock()
-        mock_project.archived_at = datetime.utcnow()
-        mock_db = MagicMock()
-        chain = mock_db.query.return_value.filter.return_value
-        chain.filter.return_value.first.return_value = mock_project
-
-        with pytest.raises(exceptions.InvalidStateTransition):
-            project_service.archive_project(mock_db, uuid.uuid4())
-
-    def test_unarchive_project(self):
-        """Test unarchiving a project."""
-        mock_project = MagicMock()
-        mock_project.archived_at = datetime.utcnow()
-        mock_db = MagicMock()
-        chain = mock_db.query.return_value.filter.return_value
-        chain.filter.return_value.first.return_value = mock_project
-
-        project_service.unarchive_project(mock_db, uuid.uuid4())
-
-        assert mock_project.archived_at is None
-        mock_db.commit.assert_called_once()
-
-    def test_unarchive_project_not_archived(self):
-        """Test unarchiving non-archived project raises InvalidStateTransition."""
-        mock_project = MagicMock()
-        mock_project.archived_at = None
-        mock_db = MagicMock()
-        chain = mock_db.query.return_value.filter.return_value
-        chain.filter.return_value.first.return_value = mock_project
-
-        with pytest.raises(exceptions.InvalidStateTransition):
-            project_service.unarchive_project(mock_db, uuid.uuid4())

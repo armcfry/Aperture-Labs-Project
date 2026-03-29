@@ -48,14 +48,10 @@ export type ApiProject = {
     description?: string;
     created_at: string;
     updated_at: string;
-    archived_at?: string | null;
 };
 
-export async function listProjects(includeArchived?: boolean): Promise<ApiProject[]> {
-    const url = includeArchived === true
-        ? `${API_BASE_URL}/projects?include_archived=true`
-        : `${API_BASE_URL}/projects`;
-    const res = await fetch(url);
+export async function listProjects(): Promise<ApiProject[]> {
+    const res = await fetch(`${API_BASE_URL}/projects`);
     const data = await parseJsonResponse<unknown>(res, `Failed to list projects: ${res.status}`);
     return Array.isArray(data) ? data : [];
 }
@@ -70,13 +66,6 @@ export async function createProject(payload: {
         body: JSON.stringify(payload),
     });
     return parseJsonResponse<ApiProject>(res, `Failed to create project: ${res.status}`);
-}
-
-export async function archiveProject(projectId: string): Promise<ApiProject> {
-    const res = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/archive`, {
-        method: "POST",
-    });
-    return parseJsonResponse<ApiProject>(res, `Failed to archive project: ${res.status}`);
 }
 
 export async function deleteProject(projectId: string): Promise<void> {

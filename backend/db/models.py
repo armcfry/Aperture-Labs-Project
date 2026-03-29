@@ -82,7 +82,6 @@ class Project(Base):
         server_default=text("NOW()"),
         onupdate=datetime.utcnow,
     )
-    archived_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     detector_version: Mapped[str | None] = mapped_column(String)
 

@@ -17,7 +17,6 @@ class ProjectUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     detector_version: str | None = None
-    archived_at: datetime | None = None
 
 
 class ProjectRead(ProjectBase):
@@ -25,7 +24,6 @@ class ProjectRead(ProjectBase):
     created_by_user_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
-    archived_at: datetime | None = None
     deleted_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)

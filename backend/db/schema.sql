@@ -17,7 +17,6 @@ CREATE TABLE projects (
     created_by_user_id UUID NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    archived_at TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ,
     detector_version VARCHAR,
 

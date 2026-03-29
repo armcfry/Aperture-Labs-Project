@@ -255,36 +255,6 @@
               ],
               "path": [
                 "projects"
-              ],
-              "query": [
-                {
-                  "key": "include_archived",
-                  "value": "false",
-                  "disabled": true
-                }
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "List Projects (Include Archived)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/projects?include_archived=true",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "projects"
-              ],
-              "query": [
-                {
-                  "key": "include_archived",
-                  "value": "true"
-                }
               ]
             }
           },
@@ -330,25 +300,6 @@
               "path": [
                 "projects",
                 "{{project_id}}"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Archive Project",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/projects/{{project_id}}/archive",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "projects",
-                "{{project_id}}",
-                "archive"
               ]
             }
           },
