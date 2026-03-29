@@ -229,7 +229,7 @@ class OllamaVLM:
         response = requests.post(
             f"{self.ollama_host}/api/generate",
             json=payload,
-            timeout=10
+            timeout=120
         )
 
         inference_time = (time.time() - start_time) * 1000
