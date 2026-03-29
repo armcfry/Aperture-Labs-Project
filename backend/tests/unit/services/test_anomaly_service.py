@@ -29,7 +29,7 @@ class TestAnomalyService:
 
         added = mock_db.add.call_args[0][0]
         assert added.label == "scratch"
-        assert added.severity == "high"
+        assert added.severity == "fod"
         assert added.confidence == 0.95
         mock_db.commit.assert_called_once()
 
@@ -95,7 +95,7 @@ class TestAnomalyService:
         payload = AnomalyUpdate(severity="fod", confidence=0.99)
         anomaly_service.update_anomaly(mock_db, uuid.uuid4(), payload)
 
-        assert mock_anomaly.severity == "high"
+        assert mock_anomaly.severity == "fod"
         assert mock_anomaly.confidence == 0.99
         mock_db.commit.assert_called_once()
 
@@ -106,10 +106,10 @@ class TestAnomalyService:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = mock_anomaly
 
-        payload = AnomalyUpdate(severity="low")
+        payload = AnomalyUpdate(severity="fod")
         anomaly_service.update_anomaly(mock_db, uuid.uuid4(), payload)
 
-        assert mock_anomaly.severity == "low"
+        assert mock_anomaly.severity == "fod"
         # label should not have been reassigned
         assert mock_anomaly.label == "original_label"
 
