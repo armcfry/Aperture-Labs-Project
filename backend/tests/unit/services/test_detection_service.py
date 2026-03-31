@@ -99,7 +99,7 @@ class TestRunDetection:
         defect = MagicMock()
         defect.id = "DEF-001"
         defect.description = "bolt on runway"
-        defect.severity = "critical"
+        defect.severity = "fod"
 
         submission = _make_submission()
         result = _make_result(pass_fail="fail", defects=[defect], response="RESULT: FAIL")
@@ -186,6 +186,86 @@ class TestRunDetection:
             detection_service._run_detection(SUBMISSION_ID, PROJECT_ID, IMAGE_KEY)
 
         mock_db.close.assert_called_once()
+
+    def test_no_annotation_on_pass(self):
+        """A passing result must never trigger OWLv2 annotation — no red boxes on clean images."""
+        defect = MagicMock()
+        defect.id = "DEF-001"
+        defect.description = "bolt on runway"
+        defect.severity = "fod"
+
+        # pass_fail="pass" even though defects list is non-empty (edge case from parser)
+        result = _make_result(pass_fail="pass", defects=[defect])
+        mock_db = MagicMock()
+        mock_db.get.return_value = _make_submission()
+
+        with (
+            patch("services.detection_service.SessionLocal", return_value=mock_db),
+            patch("services.detection_service.minio_client"),
+            patch("services.detection_service._load_image_from_minio", return_value=MagicMock()),
+            patch("services.detection_service.get_model") as mock_get_model,
+            patch("services.detection_service.wait_for_owlv2") as mock_wait,
+            patch("services.detection_service.get_owlv2_detector") as mock_detector,
+        ):
+            mock_get_model.return_value.detect_fod.return_value = result
+            detection_service._run_detection(SUBMISSION_ID, PROJECT_ID, IMAGE_KEY)
+
+        mock_wait.assert_not_called()
+        mock_detector.assert_not_called()
+
+    def test_wait_for_owlv2_called_before_annotation(self):
+        """wait_for_owlv2() must be called when defects are present."""
+        defect = MagicMock()
+        defect.id = "DEF-001"
+        defect.description = "bolt on runway"
+        defect.severity = "fod"
+
+        result = _make_result(pass_fail="fail", defects=[defect])
+        mock_db = MagicMock()
+        mock_db.get.return_value = _make_submission()
+
+        with (
+            patch("services.detection_service.SessionLocal", return_value=mock_db),
+            patch("services.detection_service.minio_client"),
+            patch("services.detection_service._load_image_from_minio", return_value=MagicMock()),
+            patch("services.detection_service.get_model") as mock_get_model,
+            patch("services.detection_service.wait_for_owlv2") as mock_wait,
+            patch("services.detection_service.build_queries_and_severity_map", return_value=([], {})),
+        ):
+            mock_get_model.return_value.detect_fod.return_value = result
+            detection_service._run_detection(SUBMISSION_ID, PROJECT_ID, IMAGE_KEY)
+
+        mock_wait.assert_called_once()
+
+    def test_owlv2_annotation_stored_when_defects_present(self):
+        """Line 118: image_to_base64(annotated) runs when OWLv2 returns an annotated image."""
+        defect = MagicMock()
+        defect.id = "DEF-001"
+        defect.description = "bolt on runway"
+        defect.severity = "fod"
+
+        submission = _make_submission()
+        result = _make_result(pass_fail="fail", defects=[defect])
+
+        mock_db = MagicMock()
+        mock_db.get.return_value = submission
+
+        with (
+            patch("services.detection_service.SessionLocal", return_value=mock_db),
+            patch("services.detection_service.minio_client"),
+            patch("services.detection_service._load_image_from_minio", return_value=MagicMock()),
+            patch("services.detection_service.get_model") as mock_get_model,
+            patch("services.detection_service.build_queries_and_severity_map", return_value=(["bolt"], {0: "fod"})),
+            patch("services.detection_service.get_owlv2_detector") as mock_detector,
+            patch("services.detection_service.image_to_base64", return_value="base64data") as mock_b64,
+        ):
+            mock_get_model.return_value.detect_fod.return_value = result
+            mock_detector.return_value.annotate.return_value = MagicMock()
+
+            detection_service._run_detection(SUBMISSION_ID, PROJECT_ID, IMAGE_KEY)
+
+        mock_b64.assert_called_once()
+        assert submission.annotated_image == "base64data"
 
     def test_sets_status_running_before_detection(self):
         submission = _make_submission()
@@ -334,7 +414,7 @@ class TestLoadSpecText:
 
 class TestBuildAnomalies:
 
-    def _make_defect(self, defect_id="DEF-1", severity="critical", description="A bolt"):
+    def _make_defect(self, defect_id="DEF-1", severity="fod", description="A bolt"):
         d = MagicMock()
         d.id = defect_id
         d.severity = severity
@@ -351,45 +431,14 @@ class TestBuildAnomalies:
         assert count == 2
         assert db.add.call_count == 2
 
-    def test_severity_mapping_critical_to_high(self):
+    def test_all_fod_anomalies_stored_as_high(self):
+        """Any FOD detection is a failure — all anomalies are stored with 'fod' severity."""
         db = MagicMock()
         submission = _make_submission()
-        result = _make_result(pass_fail="fail", defects=[self._make_defect(severity="critical")])
-
+        result = _make_result(pass_fail="fail", defects=[self._make_defect(severity="fod")])
         detection_service._build_anomalies(db, submission, result)
-
         anomaly = db.add.call_args[0][0]
-        assert anomaly.severity == "high"
-
-    def test_severity_mapping_major_to_med(self):
-        db = MagicMock()
-        submission = _make_submission()
-        result = _make_result(pass_fail="fail", defects=[self._make_defect(severity="major")])
-
-        detection_service._build_anomalies(db, submission, result)
-
-        anomaly = db.add.call_args[0][0]
-        assert anomaly.severity == "med"
-
-    def test_severity_mapping_minor_to_low(self):
-        db = MagicMock()
-        submission = _make_submission()
-        result = _make_result(pass_fail="fail", defects=[self._make_defect(severity="minor")])
-
-        detection_service._build_anomalies(db, submission, result)
-
-        anomaly = db.add.call_args[0][0]
-        assert anomaly.severity == "low"
-
-    def test_unknown_severity_defaults_to_med(self):
-        db = MagicMock()
-        submission = _make_submission()
-        result = _make_result(pass_fail="fail", defects=[self._make_defect(severity="extreme")])
-
-        detection_service._build_anomalies(db, submission, result)
-
-        anomaly = db.add.call_args[0][0]
-        assert anomaly.severity == "med"
+        assert anomaly.severity == "fod"
 
     def test_long_description_truncated_to_500(self):
         db = MagicMock()
@@ -412,7 +461,7 @@ class TestBuildAnomalies:
         assert count == 1
         anomaly = db.add.call_args[0][0]
         assert anomaly.label == "foreign_object"
-        assert anomaly.severity == "high"
+        assert anomaly.severity == "fod"
 
     def test_defect_uses_id_as_label(self):
         db = MagicMock()

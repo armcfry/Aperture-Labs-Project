@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class DefectSchema(BaseModel):
     id: str
-    severity: str  # "critical" | "major" | "minor"
+    severity: str  # "fod" — any detected item is a FOD failure
     description: str
 
 

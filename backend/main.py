@@ -3,6 +3,7 @@ GLaDOS - Aperture Labs FOD Detection API
 """
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -30,6 +31,7 @@ from core.exception_handlers import (
     conflict_error_handler,
     invalid_state_transition_handler,
 )
+from models.owlv2 import preload_owlv2
 from seed_data import run_seed_minio_only
 
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +50,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     run_seed_minio_only()
+    threading.Thread(target=preload_owlv2, daemon=True).start()
     yield
 
 

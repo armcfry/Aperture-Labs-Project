@@ -5,11 +5,15 @@ import pytest
 from unittest.mock import MagicMock, patch
 from PIL import Image
 
+import threading
+import models.owlv2 as owlv2_module
 from models.owlv2 import (
     _defect_to_query,
     build_queries_and_severity_map,
     image_to_base64,
     get_owlv2_detector,
+    preload_owlv2,
+    wait_for_owlv2,
     OWLv2Detector,
     _SEVERITY_COLORS,
     _DEFAULT_COLOR,
@@ -21,7 +25,7 @@ pytestmark = pytest.mark.unit
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _defect(description: str, severity: str = "major") -> DefectSchema:
+def _defect(description: str, severity: str = "fod") -> DefectSchema:
     return DefectSchema(id="DEF-001", severity=severity, description=description)
 
 
@@ -143,32 +147,32 @@ class TestDefectToQuery:
 
 class TestBuildQueriesAndSeverityMap:
     def test_single_defect(self):
-        defects = [_defect("loose bolt on runway", "critical")]
+        defects = [_defect("loose bolt on runway", "fod")]
         queries, smap = build_queries_and_severity_map(defects)
         assert len(queries) == 1
         assert "bolt" in queries[0]
-        assert smap[0] == "critical"
+        assert smap[0] == "fod"
 
     def test_deduplicates_identical_descriptions(self):
         defects = [
-            _defect("loose bolt", "critical"),
-            _defect("loose bolt", "major"),
+            _defect("loose bolt", "fod"),
+            _defect("loose bolt", "fod"),
         ]
         queries, smap = build_queries_and_severity_map(defects)
         assert len(queries) == 1
 
     def test_multiple_distinct_defects(self):
         defects = [
-            _defect("loose bolt", "critical"),
-            _defect("rubber debris", "major"),
+            _defect("loose bolt", "fod"),
+            _defect("rubber debris", "fod"),
         ]
         queries, smap = build_queries_and_severity_map(defects)
         assert len(queries) == 2
-        assert smap[0] == "critical"
-        assert smap[1] == "major"
+        assert smap[0] == "fod"
+        assert smap[1] == "fod"
 
     def test_skips_empty_query_from_metadata_only(self):
-        defects = [_defect("Confidence score: 1.0", "major")]
+        defects = [_defect("Confidence score: 1.0", "fod")]
         queries, smap = build_queries_and_severity_map(defects)
         assert queries == []
         assert smap == {}
@@ -180,9 +184,9 @@ class TestBuildQueriesAndSeverityMap:
 
     def test_severity_map_indices_match_queries(self):
         defects = [
-            _defect("bolt fragment", "critical"),
-            _defect("rubber strip", "minor"),
-            _defect("plastic cap", "major"),
+            _defect("bolt fragment", "fod"),
+            _defect("rubber strip", "fod"),
+            _defect("plastic cap", "fod"),
         ]
         queries, smap = build_queries_and_severity_map(defects)
         assert len(queries) == len(smap)
@@ -217,6 +221,61 @@ class TestOWLv2DetectorLoad:
         with patch.dict("sys.modules", {"torch": None, "transformers": None}):
             with pytest.raises((RuntimeError, ImportError)):
                 detector._load()
+
+    def _load_with_device_flags(self, cuda: bool, mps: bool):
+        """Helper: run _load() with device availability mocked, model download stubbed."""
+        detector = OWLv2Detector()
+        mock_model = MagicMock()
+        mock_proc = MagicMock()
+        with (
+            patch("torch.cuda.is_available", return_value=cuda),
+            patch("torch.backends.mps.is_available", return_value=mps),
+            patch("transformers.Owlv2Processor.from_pretrained", return_value=mock_proc),
+            patch("transformers.Owlv2ForObjectDetection.from_pretrained", return_value=mock_model),
+        ):
+            detector._load()
+        return detector, mock_model, mock_proc
+
+    def test_selects_cuda_device_when_available(self):
+        detector, mock_model, _ = self._load_with_device_flags(cuda=True, mps=False)
+        assert "cuda" in str(detector._device)
+
+    def test_selects_mps_device_when_cuda_unavailable(self):
+        """Apple Silicon Mac: CUDA absent, MPS present → use MPS."""
+        detector, _, _ = self._load_with_device_flags(cuda=False, mps=True)
+        assert "mps" in str(detector._device)
+
+    def test_selects_cpu_when_neither_cuda_nor_mps(self):
+        """Intel Mac / Linux CPU-only: CUDA absent, MPS absent → use CPU."""
+        detector, _, _ = self._load_with_device_flags(cuda=False, mps=False)
+        assert "cpu" in str(detector._device)
+
+    def test_selects_cpu_when_mps_attribute_missing(self):
+        """Intel Mac with old PyTorch: torch.backends has no 'mps' attr → CPU, no AttributeError."""
+        detector = OWLv2Detector()
+        mock_model = MagicMock()
+        mock_backends = MagicMock(spec=[])  # spec=[] means no attributes at all
+
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("torch.backends", mock_backends),
+            patch("transformers.Owlv2Processor.from_pretrained", return_value=MagicMock()),
+            patch("transformers.Owlv2ForObjectDetection.from_pretrained", return_value=mock_model),
+        ):
+            detector._load()
+
+        assert "cpu" in str(detector._device)
+
+    def test_model_loading_calls_to_and_eval(self):
+        """Lines 56-59: from_pretrained, .to(), .eval() must be called during load."""
+        _, mock_model, mock_proc = self._load_with_device_flags(cuda=False, mps=False)
+        mock_model.to.assert_called_once()
+        mock_model.eval.assert_called_once()
+
+    def test_model_and_processor_set_after_load(self):
+        detector, mock_model, mock_proc = self._load_with_device_flags(cuda=False, mps=False)
+        assert detector._model is mock_model
+        assert detector._processor is mock_proc
 
 
 class TestOWLv2DetectorAnnotate:
@@ -253,7 +312,7 @@ class TestOWLv2DetectorAnnotate:
         self._mock_processor(detector, [[10.0, 10.0, 80.0, 80.0]], [0.9], [0])
         with patch("torch.no_grad"), patch("torch.tensor") as mt:
             mt.return_value = MagicMock()
-            result = detector.annotate(img, ["bolt"], severity_map={0: "critical"})
+            result = detector.annotate(img, ["bolt"], severity_map={0: "fod"})
         assert result is not img
         assert result.size == img.size
 
@@ -286,10 +345,62 @@ class TestOWLv2DetectorAnnotate:
 # ── Severity colour mapping ───────────────────────────────────────────────────
 
 class TestSeverityColors:
-    def test_known_severities_have_colors(self):
-        assert "critical" in _SEVERITY_COLORS
-        assert "major" in _SEVERITY_COLORS
-        assert "minor" in _SEVERITY_COLORS
+    def test_fod_has_color(self):
+        assert "fod" in _SEVERITY_COLORS
 
     def test_unknown_severity_falls_back_to_default(self):
         assert _DEFAULT_COLOR not in _SEVERITY_COLORS.values()
+
+
+# ── preload_owlv2 / wait_for_owlv2 ───────────────────────────────────────────
+
+class TestPreloadAndWait:
+    """Covers the _load_ready Event, preload_owlv2(), and wait_for_owlv2()."""
+
+    def setup_method(self):
+        """Reset _load_ready to its default (set) state before each test."""
+        owlv2_module._load_ready.set()
+
+    def test_wait_returns_immediately_when_event_already_set(self):
+        owlv2_module._load_ready.set()
+        wait_for_owlv2(timeout=1)  # should not block
+
+    def test_wait_blocks_until_event_is_set(self):
+        owlv2_module._load_ready.clear()
+        # Release from a background thread after a short delay
+        threading.Timer(0.05, owlv2_module._load_ready.set).start()
+        wait_for_owlv2(timeout=2)
+        assert owlv2_module._load_ready.is_set()
+
+    def test_preload_sets_event_on_success(self):
+        owlv2_module._load_ready.clear()
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("torch.backends.mps.is_available", return_value=False),
+            patch("transformers.Owlv2Processor.from_pretrained", return_value=MagicMock()),
+            patch("transformers.Owlv2ForObjectDetection.from_pretrained", return_value=MagicMock()),
+            patch.object(owlv2_module, "_detector", None),
+        ):
+            preload_owlv2()
+        assert owlv2_module._load_ready.is_set()
+
+    def test_preload_sets_event_even_when_load_fails(self):
+        """Callers must not hang if OWLv2 fails to load."""
+        owlv2_module._load_ready.clear()
+        with patch.dict("sys.modules", {"torch": None, "transformers": None}):
+            preload_owlv2()
+        assert owlv2_module._load_ready.is_set()
+
+    def test_preload_clears_event_during_loading(self):
+        """_load_ready must be cleared before load starts so late-arriving callers wait."""
+        cleared_during_load = []
+
+        def slow_load(self):
+            cleared_during_load.append(owlv2_module._load_ready.is_set())
+
+        detector = OWLv2Detector()
+        with patch.object(owlv2_module, "_detector", detector):
+            with patch.object(OWLv2Detector, "_load", slow_load):
+                preload_owlv2()
+
+        assert cleared_during_load[0] is False  # event was clear while load ran

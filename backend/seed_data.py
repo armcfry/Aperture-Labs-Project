@@ -224,7 +224,7 @@ def _apply_detection_success(db: Session, submission: Submission, result) -> Non
             submission_id=submission.id,
             label="foreign_object",
             description=result.response[:500] if result.response else "FOD detected",
-            severity="high",
+            severity="fod",
             confidence=0.90,
         ))
         submission.anomaly_count = 1
@@ -245,7 +245,7 @@ def _add_placeholder_anomaly_on_failure(db: Session, submission: Submission, exc
             "Seed detection did not run (Ollama may be offline). "
             "Start Ollama (ollama serve) and optionally reset the DB to see the seed FOD analysis."
         ),
-        severity="med",
+        severity="fod",
         confidence=0.0,
     ))
     submission.anomaly_count = 1

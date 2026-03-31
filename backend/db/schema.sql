@@ -60,6 +60,7 @@ CREATE TABLE submissions (
     pass_fail VARCHAR NOT NULL,
     anomaly_count INT,
     error_message TEXT,
+    annotated_image TEXT,
 
     CONSTRAINT fk_submissions_project
         FOREIGN KEY (project_id)
@@ -97,7 +98,7 @@ CREATE TABLE anomalies (
         ON DELETE CASCADE,
 
     CONSTRAINT anomalies_severity_check
-        CHECK (severity IS NULL OR severity IN ('low', 'med', 'high')),
+        CHECK (severity IS NULL OR severity IN ('fod')),
 
     CONSTRAINT anomalies_confidence_check
         CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1))

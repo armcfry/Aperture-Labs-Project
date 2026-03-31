@@ -48,7 +48,6 @@ INSERT INTO projects (
     '11111111-1111-1111-1111-111111111111',
     NOW(),
     NOW(),
-    NULL,
     'detector-v1.2.0'
 );
 

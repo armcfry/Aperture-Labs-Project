@@ -160,6 +160,7 @@ class Submission(Base):
     pass_fail: Mapped[str] = mapped_column(String, nullable=False)
     anomaly_count: Mapped[int | None] = mapped_column(Integer)
     error_message: Mapped[str | None] = mapped_column(Text)
+    annotated_image: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
         CheckConstraint(
@@ -211,7 +212,7 @@ class Anomaly(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "severity IS NULL OR severity IN ('low', 'med', 'high')",
+            "severity IS NULL OR severity IN ('fod')",
             name="anomalies_severity_check",
         ),
         CheckConstraint(

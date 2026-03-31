@@ -27,6 +27,4 @@ class SubmissionPassFail(str, Enum):
 
 
 class AnomalySeverity(str, Enum):
-    low = "low"
-    med = "med"
-    high = "high"
+    fod = "fod"

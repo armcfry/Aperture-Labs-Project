@@ -10,17 +10,16 @@ class TestDefectSchema:
     def test_create_defect(self):
         d = DefectSchema(
             id="DEF-001",
-            severity="critical",
+            severity="fod",
             description="Foreign object at 10%, 20%",
         )
         assert d.id == "DEF-001"
-        assert d.severity == "critical"
+        assert d.severity == "fod"
         assert d.description == "Foreign object at 10%, 20%"
 
-    def test_severity_values(self):
-        for sev in ("critical", "major", "minor"):
-            d = DefectSchema(id="X", severity=sev, description="Test")
-            assert d.severity == sev
+    def test_severity_is_fod(self):
+        d = DefectSchema(id="X", severity="fod", description="Test")
+        assert d.severity == "fod"
 
 
 class TestDetectionResponse:
@@ -40,7 +39,7 @@ class TestDetectionResponse:
 
     def test_full_response_with_defects(self):
         defects = [
-            DefectSchema(id="DEF-001", severity="major", description="Issue 1"),
+            DefectSchema(id="DEF-001", severity="fod", description="Issue 1"),
         ]
         r = DetectionResponse(
             response="Full text",

@@ -40,12 +40,6 @@ vi.mock("@/lib/inspection-store", async (importOriginal) => {
 });
 
 vi.mock("@/lib/defect-parser", () => ({
-    normalizeSeverityToDefect: (s: string | null) => {
-        if (s === "high") return "critical";
-        if (s === "med") return "major";
-        if (s === "low") return "minor";
-        return "minor";
-    },
     parseDefectsFromResponse: () => [],
 }));
 
@@ -94,7 +88,7 @@ function makeAnomaly(overrides: Partial<ApiAnomaly> = {}): ApiAnomaly {
         submission_id: "sub-1",
         label: "Loose Bolt",
         description: "A loose bolt was detected near the engine mount.",
-        severity: "high",
+        severity: "fod",
         confidence: 0.9,
         created_at: "2026-03-01T10:01:00Z",
         ...overrides,
@@ -128,10 +122,10 @@ describe("InspectResultPage — Req 5: view reports feature", () => {
         await waitFor(() => expect(screen.getByText("Total Submissions")).toBeInTheDocument());
     });
 
-    it("shows Total Defects count", async () => {
+    it("shows FOD Detected count", async () => {
         mockGetSubmission.mockResolvedValue(makeSubmission());
         render(<InspectResultPage />);
-        await waitFor(() => expect(screen.getByText("Total Defects")).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText("FOD Detected")).toBeInTheDocument());
     });
 
     it("shows 'Analysis in progress' when submission is still running", async () => {

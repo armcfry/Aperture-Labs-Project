@@ -18,6 +18,7 @@ class SubmissionUpdate(BaseModel):
     pass_fail: SubmissionPassFail | None = None
     anomaly_count: int | None = None
     error_message: str | None = None
+    annotated_image: str | None = None
 
 
 class SubmissionRead(SubmissionBase):
@@ -28,5 +29,6 @@ class SubmissionRead(SubmissionBase):
     pass_fail: SubmissionPassFail
     anomaly_count: int | None
     error_message: str | None
+    annotated_image: str | None
 
     model_config = ConfigDict(from_attributes=True)

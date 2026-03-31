@@ -131,6 +131,7 @@ export type ApiSubmission = {
     pass_fail: "pass" | "fail" | "unknown";
     anomaly_count: number | null;
     error_message: string | null;
+    annotated_image: string | null;
 };
 
 export type ApiAnomaly = {
@@ -138,7 +139,7 @@ export type ApiAnomaly = {
     submission_id: string;
     label: string;
     description: string | null;
-    severity: "low" | "med" | "high" | null;
+    severity: "fod" | null;
     confidence: number | null;
     created_at: string;
 };

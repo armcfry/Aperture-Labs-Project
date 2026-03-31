@@ -71,6 +71,7 @@ endif
 test:
 	cd backend && pytest
 
+test-unit: test-backend
 test-backend:
 	cd backend && pytest -m unit
 

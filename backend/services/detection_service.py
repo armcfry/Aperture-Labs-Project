@@ -11,17 +11,11 @@ from sqlalchemy.orm import Session
 from db.models import Submission, Anomaly
 from db.session import SessionLocal
 from models.ollama_vlm import get_model
+from models.owlv2 import get_owlv2_detector, build_queries_and_severity_map, image_to_base64, wait_for_owlv2
 from services import minio_client
 from utils.pdf_extract import extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
-
-_SEVERITY_MAP = {
-    "critical": "high",
-    "major": "med",
-    "minor": "low",
-}
-
 
 def _load_image_from_minio(bucket: str, object_name: str) -> Image.Image:
     data = minio_client.get_file(bucket=bucket, object_name=object_name)
@@ -58,7 +52,7 @@ def _build_anomalies(db: Session, submission: Submission, result) -> int:
                 submission_id=submission.id,
                 label=defect.id or "foreign_object",
                 description=defect.description[:500] if defect.description else None,
-                severity=_SEVERITY_MAP.get(defect.severity, "med"),
+                severity="fod",  # Any FOD is a failure — no severity tiers
                 confidence=0.90,
             ))
         return len(defects)
@@ -68,7 +62,7 @@ def _build_anomalies(db: Session, submission: Submission, result) -> int:
         submission_id=submission.id,
         label="foreign_object",
         description=(result.response[:500] if result.response else "FOD detected"),
-        severity="high",
+        severity="fod",
         confidence=0.90,
     ))
     return 1
@@ -115,8 +109,20 @@ def _run_detection(submission_id: uuid.UUID, project_id: uuid.UUID, image_object
         spec_text = _load_spec_text(bucket)
         result = get_model().detect_fod(image, None, spec_text)
 
+        annotated_image: str | None = None
+        if result.pass_fail == "fail" and result.defects:
+            try:
+                wait_for_owlv2()
+                queries, severity_map = build_queries_and_severity_map(result.defects)
+                if queries:
+                    annotated = get_owlv2_detector().annotate(image, queries, severity_map)
+                    annotated_image = image_to_base64(annotated)
+            except Exception:
+                logger.exception("[detection] OWLv2 annotation failed for submission %s — skipping bounding boxes", submission_id)
+
         submission.status = "complete" if result.pass_fail == "pass" else "failed"
         submission.pass_fail = result.pass_fail
+        submission.annotated_image = annotated_image
         submission.anomaly_count = _build_anomalies(db, submission, result) if result.pass_fail == "fail" else 0
         db.commit()
         logger.info("[detection] Submission %s complete — %s", submission_id, result.pass_fail.upper())

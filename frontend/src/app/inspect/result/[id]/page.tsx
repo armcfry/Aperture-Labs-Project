@@ -15,8 +15,6 @@ import {
     FileCheck,
     FileText,
     AlertCircle,
-    AlertTriangle,
-    Info,
 } from "lucide-react";
 import { useApp } from "@/app/AppProvider";
 import { getSubmission, listAnomalies, getImageUrl, type ApiSubmission } from "@/lib/api";
@@ -31,24 +29,10 @@ import {
     type Defect,
 } from "@/lib/inspection-store";
 import DesignSpecPreview from "@/components/DesignSpecPreview";
-import { normalizeSeverityToDefect } from "@/lib/defect-parser";
 import { formatDateLong } from "@/lib/utils";
 import { Alert } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { DesignSpecLink, type PreviewSpec } from "@/components/DesignSpecLink";
-
-function getSeverityColor(severity: string) {
-    switch (severity) {
-        case "critical":
-            return "text-red-600 dark:text-red-400";
-        case "major":
-            return "text-orange-600 dark:text-orange-400";
-        case "minor":
-            return "text-yellow-600 dark:text-yellow-400";
-        default:
-            return "text-zinc-500 dark:text-zinc-400";
-    }
-}
 
 function getSubmissionStatusClass(status: string) {
     switch (status) {
@@ -66,32 +50,6 @@ function getSubmissionStatusLabel(status: string) {
         case "timeout": return "TIMEOUT";
         case "fail":    return "FAILED";
         default:        return status.toUpperCase();
-    }
-}
-
-function getSeverityBadgeColor(severity: string) {
-    switch (severity) {
-        case "critical":
-            return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20";
-        case "major":
-            return "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20";
-        case "minor":
-            return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20";
-        default:
-            return "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/20";
-    }
-}
-
-function getSeverityIcon(severity: string) {
-    switch (severity) {
-        case "critical":
-            return <AlertCircle className="w-4 h-4" />;
-        case "major":
-            return <AlertTriangle className="w-4 h-4" />;
-        case "minor":
-            return <Info className="w-4 h-4" />;
-        default:
-            return null;
     }
 }
 
@@ -122,7 +80,6 @@ function buildResultFromApi(
     const photoName = sub.image_id.split("/").pop() ?? "image.png";
     const defects: Defect[] = anomalies.map((a) => ({
         id: a.id,
-        severity: normalizeSeverityToDefect(a.severity),
         description: a.description ?? a.label,
     }));
     const analysis =
@@ -154,6 +111,7 @@ function buildResultFromApi(
         status: submissionStatus,
         defects,
         analysis: submissionAnalysis,
+        annotatedImage: sub.annotated_image ?? undefined,
     };
     const inspectionResult: InspectionResult = {
         id: `api-${sub.id}`,
@@ -385,10 +343,6 @@ export default function InspectResultPage() {
     const overallStatusClass = getOverallStatusClass(overallStatus);
 
     const totalDefects = submissions.reduce((sum, s) => sum + s.defects.length, 0);
-    const criticalCount = submissions.reduce(
-        (sum, s) => sum + s.defects.filter((d) => d.severity === "critical").length,
-        0,
-    );
     const failWithoutDetails = overallStatus === "FAIL" && totalDefects === 0;
 
     return (
@@ -566,7 +520,7 @@ export default function InspectResultPage() {
                             )}
 
                             {/* Stats Grid */}
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg p-4 border border-slate-200 dark:border-zinc-700">
                                     <p className="text-sm text-slate-600 dark:text-zinc-400 mb-1">
                                         Total Submissions
@@ -577,18 +531,10 @@ export default function InspectResultPage() {
                                 </div>
                                 <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg p-4 border border-slate-200 dark:border-zinc-700">
                                     <p className="text-sm text-slate-600 dark:text-zinc-400 mb-1">
-                                        Total Defects
+                                        FOD Detected
                                     </p>
-                                    <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                                    <p className={`text-2xl font-bold ${totalDefects > 0 ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-white"}`}>
                                         {totalDefects}
-                                    </p>
-                                </div>
-                                <div className="bg-slate-50 dark:bg-zinc-800 rounded-lg p-4 border border-slate-200 dark:border-zinc-700">
-                                    <p className="text-sm text-slate-600 dark:text-zinc-400 mb-1">
-                                        Critical Issues
-                                    </p>
-                                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                                        {criticalCount}
                                     </p>
                                 </div>
                             </div>
@@ -708,13 +654,9 @@ export default function InspectResultPage() {
                                                         <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
                                                             {defect.id}
                                                         </span>
-                                                        <span
-                                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${getSeverityBadgeColor(
-                                                                defect.severity,
-                                                            )}`}
-                                                        >
-                                                            {getSeverityIcon(defect.severity)}
-                                                            {defect.severity.toUpperCase()}
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20">
+                                                            <AlertCircle className="w-4 h-4" />
+                                                            FOD
                                                         </span>
                                                     </div>
                                                     <p className="text-slate-700 dark:text-zinc-300">
